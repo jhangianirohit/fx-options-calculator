@@ -725,7 +725,23 @@
 
         /* Batch Analysis Specific */
         .upload-section {
+            text-align: left;
+        }
+
+        .upload-container {
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        .upload-box-wrapper {
+            flex: 0 0 60%;
             text-align: center;
+        }
+
+        .upload-requirements {
+            flex: 0 0 calc(40% - 24px);
+            text-align: left;
         }
 
         .upload-area {
@@ -1042,15 +1058,15 @@
 
         <!-- Tab Navigation -->
         <div class="tab-navigation">
-            <button class="tab-button active" onclick="switchTab('single-pair')">Single Pair Analysis</button>
-            <button class="tab-button" onclick="switchTab('batch')">Batch Analysis</button>
+            <button class="tab-button" onclick="switchTab('single-pair')">Single Pair Analysis</button>
+            <button class="tab-button active" onclick="switchTab('batch')">Batch Analysis</button>
         </div>
     </header>
 
     <div class="container">
 
         <!-- Single Pair Analysis Tab -->
-        <div id="single-pair-tab" class="tab-content active">
+        <div id="single-pair-tab" class="tab-content">
 
         <!-- Configuration Card -->
         <div class="card">
@@ -1165,29 +1181,35 @@
         <!-- End Single Pair Analysis Tab -->
 
         <!-- Batch Analysis Tab -->
-        <div id="batch-tab" class="tab-content">
+        <div id="batch-tab" class="tab-content active">
 
             <!-- Upload Section Card -->
             <div class="card upload-section">
                 <div class="card-header">Data Upload</div>
 
-                <div class="upload-area" onclick="document.getElementById('excelFileInput').click()">
-                    <div class="upload-icon">📁</div>
-                    <h3>Upload Excel File</h3>
-                    <p>Drop your Excel file here or click to browse</p>
-                    <p class="upload-hint">Required sheets: "Spot Data" and "Implied Vols"</p>
-                    <input type="file" id="excelFileInput" accept=".xlsx" onchange="handleExcelUpload(event)" style="display: none;">
-                    <button class="btn-large" onclick="event.stopPropagation(); document.getElementById('excelFileInput').click()">
-                        Choose File
-                    </button>
-                </div>
+                <div class="upload-container">
+                    <div class="upload-box-wrapper">
+                        <div class="upload-area" onclick="document.getElementById('excelFileInput').click()">
+                            <div class="upload-icon">📁</div>
+                            <h3>Upload Excel File</h3>
+                            <p>Drop your Excel file here or click to browse</p>
+                            <p class="upload-hint">Required sheets: "Spot Data" and "Implied Vols"</p>
+                            <input type="file" id="excelFileInput" accept=".xlsx" onchange="handleExcelUpload(event)" style="display: none;">
+                            <button class="btn-large" onclick="event.stopPropagation(); document.getElementById('excelFileInput').click()">
+                                Choose File
+                            </button>
+                        </div>
+                    </div>
 
-                <div class="info-box" style="margin-top: 20px;">
-                    <div>
-                    <strong>File Requirements:</strong><br>
-                    • Excel file (.xlsx) with two sheets: "Spot Data" and "Implied Vols"<br>
-                    • Spot Data: Timestamp column + currency pair columns<br>
-                    • Implied Vols: Pair names + ImpliedVol (as decimals, e.g., 0.105 = 10.5%)
+                    <div class="upload-requirements">
+                        <div class="info-box" style="margin-top: 0;">
+                            <div>
+                            <strong>File Requirements:</strong><br>
+                            • Excel file (.xlsx) with two sheets: "Spot Data" and "Implied Vols"<br>
+                            • Spot Data: Timestamp column + currency pair columns<br>
+                            • Implied Vols: Pair names + ImpliedVol (as decimals, e.g., 0.105 = 10.5%)
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1253,20 +1275,20 @@
                         Custom window:
                     </label>
 
-                    <div id="customWindowInputs" style="margin-left: 25px; margin-top: 10px;">
+                    <div id="customWindowInputs" style="max-width: 500px;">
                         <table style="border-spacing: 10px 5px;">
                             <tr>
-                                <td style="text-align: right; padding-right: 10px;"><strong>Start:</strong></td>
+                                <td style="text-align: right; padding-right: 10px; font-weight: 500;">Start:</td>
                                 <td>
-                                    <input type="date" id="analysisStartDate" style="padding: 5px;" disabled onchange="updateAnalysisWindowPreview()">
-                                    <input type="time" id="analysisStartTime" step="600" style="margin-left: 5px; padding: 5px;" disabled onchange="updateAnalysisWindowPreview()">
+                                    <input type="date" id="analysisStartDate" disabled onchange="updateAnalysisWindowPreview()">
+                                    <input type="time" id="analysisStartTime" step="600" style="margin-left: 5px;" disabled onchange="updateAnalysisWindowPreview()">
                                 </td>
                             </tr>
                             <tr>
-                                <td style="text-align: right; padding-right: 10px;"><strong>End:</strong></td>
+                                <td style="text-align: right; padding-right: 10px; font-weight: 500;">End:</td>
                                 <td>
-                                    <input type="date" id="analysisEndDate" style="padding: 5px;" disabled onchange="updateAnalysisWindowPreview()">
-                                    <input type="time" id="analysisEndTime" step="600" style="margin-left: 5px; padding: 5px;" disabled onchange="updateAnalysisWindowPreview()">
+                                    <input type="date" id="analysisEndDate" disabled onchange="updateAnalysisWindowPreview()">
+                                    <input type="time" id="analysisEndTime" step="600" style="margin-left: 5px;" disabled onchange="updateAnalysisWindowPreview()">
                                 </td>
                             </tr>
                         </table>
@@ -1493,6 +1515,9 @@
                         'verification'
                     );
 
+                    // Hide upload section after successful upload
+                    document.querySelector('.upload-section').style.display = 'none';
+
                     // Show configuration and pair selection
                     document.getElementById('batchConfigSection').style.display = 'grid';
                     document.getElementById('batchBaseFrequency').value = batchData.frequency;
@@ -1590,7 +1615,40 @@
 
         function showBatchMessage(message, type = 'verification') {
             const div = document.getElementById('uploadStatus');
-            div.innerHTML = `<div class="${type}" style="margin: 10px 0;">${message}</div>`;
+            let html = `<div class="${type}" style="margin: 10px 0;">${message}</div>`;
+
+            // Add re-upload button for successful uploads
+            if (type === 'verification') {
+                html += `<button class="secondary" style="margin-top: 10px;" onclick="resetUpload()">Upload Different File</button>`;
+            }
+
+            div.innerHTML = html;
+        }
+
+        function resetUpload() {
+            // Clear batch data
+            batchData = {
+                timestamps: [],
+                spotPrices: {},
+                impliedVols: {},
+                pairNames: [],
+                frequency: 10,
+                results: {},
+                fullDataRange: null
+            };
+
+            // Clear file input
+            document.getElementById('excelFileInput').value = '';
+
+            // Hide all sections
+            document.getElementById('uploadStatus').innerHTML = '';
+            document.getElementById('batchConfigSection').style.display = 'none';
+            document.getElementById('analysisWindowSection').style.display = 'none';
+            document.getElementById('pairSelectionSection').style.display = 'none';
+            document.getElementById('batchResultsSection').style.display = 'none';
+
+            // Show upload section
+            document.querySelector('.upload-section').style.display = 'block';
         }
 
         function toggleBatchExpiryMode() {
@@ -2096,15 +2154,20 @@
             const top5 = pairResults.slice(0, 5);
             const bottom5 = pairResults.slice(-5).reverse();
 
+            // Calculate correct start rank for bottom 5
+            // If there are 33 pairs, bottom 5 should start at rank 29 (33 - 5 + 1)
+            // If there are 3 pairs, bottom 5 should start at rank 1 (not -1)
+            const bottom5StartRank = Math.max(1, pairResults.length - bottom5.length + 1);
+
             document.getElementById('top5Table').innerHTML = generateRankingTable(top5, 1);
-            document.getElementById('bottom5Table').innerHTML = generateRankingTable(bottom5, pairResults.length - 4);
+            document.getElementById('bottom5Table').innerHTML = generateRankingTable(bottom5, bottom5StartRank);
         }
 
         function generateRankingTable(pairs, startRank) {
             let html = '<table class="ranking-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Rank</th><th>Pair</th><th>Avg P&L</th>';
-            html += '<th>10Δ Put</th><th>25Δ Put</th><th>ATM Call</th><th>25Δ Call</th><th>10Δ Call</th>';
-            html += '<th>Real Vol</th><th>Impl Vol</th><th>Vol Diff</th>';
+            html += '<th>Rank</th><th>Pair</th><th style="text-align: right;">Avg P&L</th>';
+            html += '<th style="text-align: right;">10Δ Put</th><th style="text-align: right;">25Δ Put</th><th style="text-align: right;">ATM Call</th><th style="text-align: right;">25Δ Call</th><th style="text-align: right;">10Δ Call</th>';
+            html += '<th style="text-align: right;">Real Vol</th><th style="text-align: right;">Impl Vol</th><th style="text-align: right;">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result], idx) => {
@@ -2125,7 +2188,7 @@
 
                 html += `<td>${(result.realizedVol * 100).toFixed(2)}%</td>`;
                 html += `<td>${(result.impliedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}pp</td>`;
+                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
                 html += '</tr>';
             });
 
@@ -2162,9 +2225,9 @@
 
         function generateCurrencyGroupTable(pairs) {
             let html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Pair</th><th>Avg P&L</th>';
-            html += '<th>10Δ Put</th><th>25Δ Put</th><th>ATM Call</th><th>25Δ Call</th><th>10Δ Call</th>';
-            html += '<th>Real Vol</th><th>Impl Vol</th><th>Vol Diff</th>';
+            html += '<th>Pair</th><th style="text-align: right;">Avg P&L</th>';
+            html += '<th style="text-align: right;">10Δ Put</th><th style="text-align: right;">25Δ Put</th><th style="text-align: right;">ATM Call</th><th style="text-align: right;">25Δ Call</th><th style="text-align: right;">10Δ Call</th>';
+            html += '<th style="text-align: right;">Real Vol</th><th style="text-align: right;">Impl Vol</th><th style="text-align: right;">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result]) => {
@@ -2182,7 +2245,7 @@
 
                 html += `<td>${(result.realizedVol * 100).toFixed(2)}%</td>`;
                 html += `<td>${(result.impliedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}pp</td>`;
+                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
                 html += '</tr>';
             });
 
@@ -2231,7 +2294,7 @@
                 html += `Avg P&L: ${formatThousand(result.avgPnL)} | `;
                 html += `Impl Vol: ${(result.impliedVol * 100).toFixed(2)}% | `;
                 html += `Real Vol: ${(result.realizedVol * 100).toFixed(2)}% | `;
-                html += `Vol Diff: ${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}pp`;
+                html += `Vol Diff: ${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%`;
                 html += `</div>`;
 
                 // View Charts button
@@ -3269,7 +3332,7 @@
             summaryHTML += `Average P&L: ${formatThousand(averagePnL)} | `;
             summaryHTML += `Implied Vol: ${impliedVolPercent.toFixed(2)}% | `;
             summaryHTML += `Realized Vol: ${realizedVolPercent.toFixed(2)}% | `;
-            summaryHTML += `Vol Diff: ${volDifferenceSign}${volDifference.toFixed(2)}pp`;
+            summaryHTML += `Vol Diff: ${volDifferenceSign}${volDifference.toFixed(2)}%`;
             summaryHTML += '</div>';
 
             console.log("Summary HTML length:", summaryHTML.length);
