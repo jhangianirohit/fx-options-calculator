@@ -129,6 +129,46 @@
             display: block;
         }
 
+        /* Results Tabs */
+        .results-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .results-tabs .tab-button {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-size: 14px;
+            font-weight: 500;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: -2px;
+        }
+
+        .results-tabs .tab-button:hover {
+            color: #1f2937;
+            background: #f9fafb;
+        }
+
+        .results-tabs .tab-button.active {
+            color: #1e40af;
+            border-bottom-color: #1e40af;
+            font-weight: 600;
+        }
+
+        .results-tab-content {
+            display: none;
+        }
+
+        .results-tab-content.active {
+            display: block;
+        }
+
         /* Cards */
         .card {
             background: white;
@@ -1318,6 +1358,15 @@
                             </label>
                         </div>
                     </div>
+                    <div class="input-group">
+                        <label class="input-label">
+                            <input type="checkbox" id="includeCorrelationAnalysis" checked>
+                            Include Correlation Analysis
+                        </label>
+                        <span class="label-hint" style="display: block; margin-top: 4px; font-size: 12px; color: #6b7280;">
+                            Compare realized vs implied correlations across currency groups
+                        </span>
+                    </div>
                 </div>
             </div>
             <!-- End Configuration Card -->
@@ -1381,6 +1430,11 @@
                 <button onclick="startBatchCalculation()" class="btn-large" style="width: 100%; margin-top: 16px;">
                     Calculate All Selected Pairs
                 </button>
+            </div>
+
+            <!-- Correlation Group Selection Card -->
+            <div class="card" id="correlationGroupSelection" style="display: none;">
+                <!-- Will be populated by displayCorrelationGroupSelection() -->
             </div>
 
             <!-- Progress Section Card -->
@@ -1858,6 +1912,365 @@
             return blocks;
         }
 
+        // ============ CORRELATION ANALYSIS FUNCTIONS ============
+
+        // Currency precedence for canonical ordering
+        const CURRENCY_PRECEDENCE = {
+            'USD': 1,
+            'EUR': 2,
+            'GBP': 3,
+            'JPY': 4,
+            'CHF': 5,
+            'AUD': 6,
+            'NZD': 7,
+            'CAD': 8,
+            'SGD': 9,
+            'CNH': 10,
+            'THB': 11,
+            'ZAR': 12,
+            'MXN': 13,
+            'KRW': 14,
+            'INR': 15,
+            'TRY': 16,
+            'BRL': 17
+        };
+
+        function getCurrencyPrecedence(currency) {
+            return CURRENCY_PRECEDENCE[currency] || 999; // Unknown currencies go last
+        }
+
+        function getCanonicalOrder(ccy1, ccy2) {
+            // Returns currencies in precedence order
+            // e.g., getCanonicalOrder('JPY', 'USD') → ['USD', 'JPY']
+            const prec1 = getCurrencyPrecedence(ccy1);
+            const prec2 = getCurrencyPrecedence(ccy2);
+
+            if (prec1 < prec2) {
+                return [ccy1, ccy2];
+            } else {
+                return [ccy2, ccy1];
+            }
+        }
+
+        function extractOtherCurrency(pairName, baseCurrency) {
+            // Extract the non-base currency from a pair
+            // pairName: 6 characters (e.g., "EURUSD", "USDJPY", "EURGBP")
+            // baseCurrency: 3 characters (e.g., "USD", "EUR", "JPY")
+
+            const ccy1 = pairName.substring(0, 3);
+            const ccy2 = pairName.substring(3, 6);
+
+            if (ccy1 === baseCurrency) {
+                return ccy2;
+            } else if (ccy2 === baseCurrency) {
+                return ccy1;
+            } else {
+                // Pair doesn't contain baseCurrency - should not happen if filtered correctly
+                console.error(`ERROR: ${pairName} does not contain ${baseCurrency}`);
+                return null;
+            }
+        }
+
+        function calculateImpliedCorrelation(pair1, pair2, crossPair, impliedVols) {
+            const vol1 = impliedVols[pair1];
+            const vol2 = impliedVols[pair2];
+            const volCross = impliedVols[crossPair];
+
+            if (vol1 === undefined || vol1 === null || vol2 === undefined || vol2 === null || volCross === undefined || volCross === null) {
+                return null; // Missing data
+            }
+
+            // Formula: ρ = (σ₁² + σ₂² - σ_cross²) / (2 × σ₁ × σ₂)
+            const correlation = (vol1**2 + vol2**2 - volCross**2) / (2 * vol1 * vol2);
+
+            // Clamp to [-1, 1] range (formula can give values outside due to vol surface arbitrage)
+            return Math.max(-1, Math.min(1, correlation));
+        }
+
+        function calculateRealizedCorrelation(pair1, pair2, crossPair, realizedVols) {
+            const vol1 = realizedVols[pair1];
+            const vol2 = realizedVols[pair2];
+            const volCross = realizedVols[crossPair];
+
+            // Check for null/undefined, but allow 0 (zero volatility is valid)
+            if (vol1 === undefined || vol1 === null || vol2 === undefined || vol2 === null || volCross === undefined || volCross === null) {
+                return null; // Missing data
+            }
+
+            // Same formula as implied, but using realized vols
+            const correlation = (vol1**2 + vol2**2 - volCross**2) / (2 * vol1 * vol2);
+
+            // Clamp to [-1, 1] range
+            return Math.max(-1, Math.min(1, correlation));
+        }
+
+        function normalizePairForCorrelation(pairName, baseCurrency) {
+            // pairName: e.g., "USDJPY", "EURUSD", "GBPJPY"
+            // baseCurrency: e.g., "USD", "JPY", "GBP"
+
+            // Extract currencies
+            let ccy1, ccy2;
+            if (pairName.includes('USD')) {
+                if (pairName.startsWith('USD')) {
+                    ccy1 = 'USD';
+                    ccy2 = pairName.substring(3, 6);
+                } else {
+                    ccy1 = pairName.substring(0, 3);
+                    ccy2 = 'USD';
+                }
+            } else {
+                ccy1 = pairName.substring(0, 3);
+                ccy2 = pairName.substring(3, 6);
+            }
+
+            // Determine if we need to invert to normalize to baseCurrency
+            if (ccy1 === baseCurrency) {
+                return { normalized: `${ccy1}${ccy2}`, inverted: false };
+            } else if (ccy2 === baseCurrency) {
+                return { normalized: `${ccy2}${ccy1}`, inverted: true };
+            } else {
+                return null; // Pair doesn't contain baseCurrency
+            }
+        }
+
+        function buildCorrelationGroups(analyzedPairs, currencies) {
+            const groups = {};
+
+            currencies.forEach(baseCurrency => {
+                // Find all pairs containing this currency (exact match)
+                const pairsWithCurrency = analyzedPairs.filter(pair => {
+                    const ccy1 = pair.substring(0, 3);
+                    const ccy2 = pair.substring(3, 6);
+                    return ccy1 === baseCurrency || ccy2 === baseCurrency;
+                });
+
+                // CRITICAL: Remove duplicates using Set
+                const uniquePairs = [...new Set(pairsWithCurrency)];
+
+                console.log(`${baseCurrency} pairs before dedup: ${pairsWithCurrency.length}, after: ${uniquePairs.length}`);
+
+                // Need at least 2 pairs to form correlations
+                if (uniquePairs.length >= 2) {
+                    groups[baseCurrency] = uniquePairs;
+                }
+            });
+
+            return groups;
+        }
+
+        function calculateGroupCorrelations(baseCurrency, pairsInGroup, impliedVols, realizedVols) {
+            console.log(`\n=== ${baseCurrency} Correlations ===`);
+            console.log(`Pairs in group: ${pairsInGroup.join(', ')}`);
+
+            const correlations = [];
+            const processedPairs = new Set();
+
+            // Extract other currencies from each pair
+            const normalizedPairs = pairsInGroup.map(pair => {
+                const otherCurrency = extractOtherCurrency(pair, baseCurrency);
+                console.log(`  ${pair} with base ${baseCurrency} → other currency: ${otherCurrency}`);
+                return {
+                    originalPair: pair,
+                    otherCurrency: otherCurrency
+                };
+            });
+
+            console.log(`Normalized pairs:`, normalizedPairs);
+
+            // Generate all pairwise combinations
+            for (let i = 0; i < normalizedPairs.length; i++) {
+                for (let j = i + 1; j < normalizedPairs.length; j++) {
+                    const pair1Data = normalizedPairs[i];
+                    const pair2Data = normalizedPairs[j];
+
+                    const ccy1 = pair1Data.otherCurrency;
+                    const ccy2 = pair2Data.otherCurrency;
+
+                    if (!ccy1 || !ccy2) {
+                        console.warn(`  SKIP: Could not extract currencies`);
+                        continue;
+                    }
+
+                    // Determine canonical order for display
+                    const [canonCcy1, canonCcy2] = getCanonicalOrder(ccy1, ccy2);
+                    
+                    // Create canonical pair identifier to avoid duplicates
+                    // Use original pair names for the key, not normalized ones
+                    const pairKey = [pair1Data.originalPair, pair2Data.originalPair].sort().join('_');
+
+                    if (processedPairs.has(pairKey)) {
+                        console.log(`  SKIP: Already processed ${pair1Data.originalPair} vs ${pair2Data.originalPair}`);
+                        continue;
+                    }
+                    processedPairs.add(pairKey);
+                    
+                    console.log(`  Processing: ${pair1Data.originalPair} vs ${pair2Data.originalPair}`);
+
+                    // Find cross pair
+                    const crossPair1 = ccy1 + ccy2;
+                    const crossPair2 = ccy2 + ccy1;
+
+                    console.log(`  Looking for cross pair between ${ccy1} and ${ccy2}: trying ${crossPair1} or ${crossPair2}`);
+
+                    let crossPair = null;
+                    if (impliedVols[crossPair1] !== undefined) {
+                        crossPair = crossPair1;
+                        console.log(`    ✓ Found ${crossPair1}`);
+                    } else if (impliedVols[crossPair2] !== undefined) {
+                        crossPair = crossPair2;
+                        console.log(`    ✓ Found ${crossPair2}`);
+                    } else {
+                        console.log(`    ✗ Missing both ${crossPair1} and ${crossPair2} - SKIPPING`);
+                    }
+
+                    if (!crossPair) {
+                        console.log(`  SKIP: ${baseCurrency} correlation ${ccy1}/${ccy2} - missing cross pair vol`);
+                        continue;
+                    }
+
+                    // Calculate
+                    const impliedCorr = calculateImpliedCorrelation(
+                        pair1Data.originalPair,
+                        pair2Data.originalPair,
+                        crossPair,
+                        impliedVols
+                    );
+
+                    const realizedCorr = calculateRealizedCorrelation(
+                        pair1Data.originalPair,
+                        pair2Data.originalPair,
+                        crossPair,
+                        realizedVols
+                    );
+
+                    console.log(`  Calculated: impliedCorr=${impliedCorr}, realizedCorr=${realizedCorr}`);
+
+                    if (impliedCorr !== null && realizedCorr !== null) {
+                        const displayPair1 = baseCurrency + canonCcy1;
+                        const displayPair2 = baseCurrency + canonCcy2;
+
+                        correlations.push({
+                            pair1: displayPair1,
+                            pair2: displayPair2,
+                            pair1Original: pair1Data.originalPair,
+                            pair2Original: pair2Data.originalPair,
+                            crossPair: crossPair,
+                            impliedCorr: impliedCorr,
+                            realizedCorr: realizedCorr,
+                            difference: realizedCorr - impliedCorr
+                        });
+
+                        console.log(`  ✓ ${displayPair1} vs ${displayPair2} (cross: ${crossPair})`);
+                    } else {
+                        console.log(`  ✗ SKIPPED: impliedCorr=${impliedCorr}, realizedCorr=${realizedCorr}`);
+                        if (impliedCorr === null) {
+                            console.log(`    Missing implied vols: ${pair1Data.originalPair}=${impliedVols[pair1Data.originalPair]}, ${pair2Data.originalPair}=${impliedVols[pair2Data.originalPair]}, ${crossPair}=${impliedVols[crossPair]}`);
+                        }
+                        if (realizedCorr === null) {
+                            console.log(`    Missing realized vols: ${pair1Data.originalPair}=${realizedVols[pair1Data.originalPair]}, ${pair2Data.originalPair}=${realizedVols[pair2Data.originalPair]}, ${crossPair}=${realizedVols[crossPair]}`);
+                        }
+                    }
+                }
+            }
+
+            console.log(`${baseCurrency}: ${pairsInGroup.length} pairs → ${correlations.length} correlations`);
+
+            return correlations;
+        }
+
+        function testCorrelationLogic() {
+            // Test data
+            const testPairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'EURJPY', 'GBPJPY', 'EURGBP'];
+            const testCurrencies = ['USD', 'EUR', 'GBP', 'JPY'];
+
+            console.log('\n=== CORRELATION LOGIC TEST ===\n');
+
+            // Test buildCorrelationGroups
+            const groups = buildCorrelationGroups(testPairs, testCurrencies);
+
+            Object.keys(groups).forEach(currency => {
+                console.log(`\n${currency} Group:`);
+                console.log(`  Pairs: ${groups[currency].join(', ')}`);
+                console.log(`  Expected correlations: ${groups[currency].length * (groups[currency].length - 1) / 2}`);
+
+                // Test extractOtherCurrency for each pair
+                groups[currency].forEach(pair => {
+                    const other = extractOtherCurrency(pair, currency);
+                    console.log(`    ${pair} → other: ${other}`);
+                });
+            });
+
+            console.log('\n=== Expected Results ===');
+            console.log('USD: 3 pairs (EURUSD, GBPUSD, USDJPY) → 3 correlations');
+            console.log('  1. USD/EUR vs USD/GBP (cross: EURGBP)');
+            console.log('  2. USD/EUR vs USD/JPY (cross: EURJPY)');
+            console.log('  3. USD/GBP vs USD/JPY (cross: GBPJPY)');
+
+            console.log('\nEUR: 3 pairs (EURUSD, EURJPY, EURGBP) → 3 correlations');
+            console.log('  1. EUR/USD vs EUR/GBP (cross: GBPUSD)');
+            console.log('  2. EUR/USD vs EUR/JPY (cross: USDJPY)');
+            console.log('  3. EUR/GBP vs EUR/JPY (cross: GBPJPY)');
+
+            console.log('\nGBP: 3 pairs (GBPUSD, GBPJPY, EURGBP) → 3 correlations');
+            console.log('  1. GBP/USD vs GBP/EUR (cross: EURUSD)');
+            console.log('  2. GBP/USD vs GBP/JPY (cross: USDJPY)');
+            console.log('  3. GBP/EUR vs GBP/JPY (cross: EURJPY)');
+
+            console.log('\nJPY: 3 pairs (USDJPY, EURJPY, GBPJPY) → 3 correlations');
+            console.log('  1. JPY/USD vs JPY/EUR (cross: EURUSD)');
+            console.log('  2. JPY/USD vs JPY/GBP (cross: GBPUSD)');
+            console.log('  3. JPY/EUR vs JPY/GBP (cross: EURGBP)');
+        }
+
+        function calculateAllCorrelations(analyzedPairs, currencies, impliedVols, realizedVols, selectedCurrencies) {
+            const allCorrelations = {};
+
+            // Build correlation groups
+            const groups = buildCorrelationGroups(analyzedPairs, currencies);
+
+            // Calculate correlations for selected currency groups
+            Object.keys(groups).forEach(baseCurrency => {
+                if (selectedCurrencies.includes(baseCurrency)) {
+                    const pairsInGroup = groups[baseCurrency];
+                    const correlations = calculateGroupCorrelations(
+                        baseCurrency,
+                        pairsInGroup,
+                        impliedVols,
+                        realizedVols
+                    );
+
+                    if (correlations.length > 0) {
+                        allCorrelations[baseCurrency] = {
+                            correlations: correlations,
+                            avgImpliedCorr: correlations.reduce((sum, c) => sum + c.impliedCorr, 0) / correlations.length,
+                            avgRealizedCorr: correlations.reduce((sum, c) => sum + c.realizedCorr, 0) / correlations.length,
+                            avgDifference: correlations.reduce((sum, c) => sum + c.difference, 0) / correlations.length,
+                            count: correlations.length
+                        };
+                    }
+                }
+            });
+
+            return allCorrelations;
+        }
+
+        function formatCorrelation(correlation) {
+            // Convert to percentage, no decimals
+            // 0.8724 → 87%
+            // -0.4521 → -45%
+            const percent = Math.round(correlation * 100);
+            return percent >= 0 ? `${percent}%` : `${percent}%`;
+        }
+
+        function formatCorrelationDiff(difference) {
+            // Convert to percentage with sign, no decimals
+            // 0.0734 → +7%
+            // -0.0421 → -4%
+            const percent = Math.round(difference * 100);
+            const sign = percent > 0 ? '+' : '';
+            return `${sign}${percent}%`;
+        }
+
         function detectFrequency(timestamps) {
             // Filter out any null/undefined timestamps
             const validTimestamps = timestamps.filter(t => t != null);
@@ -1997,6 +2410,17 @@
             section.style.display = 'block';
 
             updatePairCounter();
+
+            // Show correlation group selection if enabled
+            if (document.getElementById('includeCorrelationAnalysis') && document.getElementById('includeCorrelationAnalysis').checked) {
+                const correlationGroups = buildCorrelationGroups(
+                    [...usdPairs, ...availableCrosses],
+                    currencies
+                );
+                displayCorrelationGroupSelection(correlationGroups);
+            } else {
+                document.getElementById('correlationGroupSelection').style.display = 'none';
+            }
         }
 
         function selectAllPairs() {
@@ -2032,6 +2456,71 @@
             if (counter) {
                 counter.textContent = `${checked} selected`;
             }
+        }
+
+        function displayCorrelationGroupSelection(correlationGroups) {
+            if (!document.getElementById('includeCorrelationAnalysis') || !document.getElementById('includeCorrelationAnalysis').checked) {
+                document.getElementById('correlationGroupSelection').style.display = 'none';
+                return; // Correlation analysis disabled
+            }
+
+            const currencies = Object.keys(correlationGroups).sort();
+
+            if (currencies.length === 0) {
+                document.getElementById('correlationGroupSelection').style.display = 'none';
+                return; // No correlation groups available
+            }
+
+            let html = `
+                <div class="card-header">
+                    Select Currency Groups for Correlation Analysis
+                </div>
+
+                <div class="pair-group">
+                    <h4>Available Currency Groups</h4>
+                    <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">
+                        Select which currency groups to analyze for realized vs implied correlations.
+                        Each group requires at least 2 pairs with the common currency.
+                    </p>
+
+                    <div class="pair-grid">`;
+
+            currencies.forEach(currency => {
+                const pairCount = correlationGroups[currency].length;
+                const corrCount = (pairCount * (pairCount - 1)) / 2; // n choose 2
+                const isUSD = currency === 'USD';
+
+                html += `
+                    <label class="pair-checkbox">
+                        <input type="checkbox" name="corrGroup" value="${currency}" ${isUSD ? 'checked' : ''}>
+                        <span>${getCurrencyName(currency)}</span>
+                        <div style="font-size: 11px; color: #6b7280; margin-top: 2px;">
+                            ${pairCount} pairs, ${corrCount} correlations
+                        </div>
+                    </label>`;
+            });
+
+            html += `
+                    </div>
+                </div>
+
+                <div style="margin-top: 16px;">
+                    <button class="btn btn-secondary btn-sm" onclick="selectAllCorrGroups()">Select All</button>
+                    <button class="btn btn-secondary btn-sm" onclick="deselectAllCorrGroups()">Deselect All</button>
+                </div>
+            `;
+
+            const section = document.getElementById('correlationGroupSelection');
+            section.innerHTML = html;
+            section.style.display = 'block';
+        }
+
+        function selectAllCorrGroups() {
+            document.querySelectorAll('input[name="corrGroup"]').forEach(cb => cb.checked = true);
+        }
+
+        function deselectAllCorrGroups() {
+            document.querySelectorAll('input[name="corrGroup"]').forEach(cb => cb.checked = false);
         }
 
         function showBatchMessage(message, type = 'verification') {
@@ -2539,8 +3028,66 @@
             document.getElementById('progressSection').style.display = 'none';
             document.getElementById('batchResults').style.display = 'block';
 
-            // Display results
-            displayBatchResults();
+            // Calculate correlations if enabled
+            let correlationResults = null;
+            if (document.getElementById('includeCorrelationAnalysis') && document.getElementById('includeCorrelationAnalysis').checked) {
+                const selectedGroups = Array.from(
+                    document.querySelectorAll('input[name="corrGroup"]:checked')
+                ).map(cb => cb.value);
+
+                if (selectedGroups.length > 0) {
+                    // Extract realized vols from P&L results
+                    const realizedVols = {};
+                    Object.keys(batchData.results).forEach(pair => {
+                        if (batchData.results[pair].realizedVol !== undefined) {
+                            realizedVols[pair] = batchData.results[pair].realizedVol;
+                        }
+                    });
+
+                    // Calculate realized vols for cross pairs that don't have P&L results
+                    // Cross pairs have spot data but no P&L calculation, so we need to calculate their realized vol
+                    const analyzedPairs = [...new Set(selectedPairs.filter(p => batchData.results[p] && !batchData.results[p].error))];
+                    
+                    // Get the analysis data (which may be filtered to a window)
+                    const analysisData = window.currentAnalysisData || batchData;
+                    
+                    // Check all pairs that don't have realized vols but have spot data
+                    // Note: Check for undefined, not falsy (0 is a valid realized vol)
+                    analyzedPairs.forEach(pair => {
+                        if (realizedVols[pair] === undefined && analysisData.spotPrices[pair]) {
+                            // Calculate realized vol for this cross pair
+                            const spots = analysisData.spotPrices[pair];
+                            const numPoints = spots.length;
+                            const totalMinutes = (numPoints - 1) * baseFreq;
+                            const totalDays = totalMinutes / (60 * 24);
+                            
+                            // Use same hedge times as P&L calculation
+                            const lastCalculationMinutes = totalMinutes;
+                            const hedgeTimes = calculateHedgeTimes(lastCalculationMinutes, hedgeFreq);
+                            
+                            // Calculate realized volatility
+                            const realizedVol = calculateRealizedVolatility(spots, totalDays, hedgeTimes, baseFreq);
+                            realizedVols[pair] = realizedVol;
+                            
+                            console.log(`Calculated realized vol for ${pair}: ${(realizedVol * 100).toFixed(2)}%`);
+                        }
+                    });
+
+                    console.log(`Realized vols available:`, Object.keys(realizedVols));
+
+                    // Calculate correlations
+                    correlationResults = calculateAllCorrelations(
+                        analyzedPairs, // analyzed pairs (deduplicated)
+                        batchData.currencies, // all available currencies
+                        batchData.impliedVols, // implied vols
+                        realizedVols, // realized vols (including cross pairs)
+                        selectedGroups // selected currency groups
+                    );
+                }
+            }
+
+            // Display results with tabs
+            displayResultsWithTabs(batchData.results, correlationResults);
         }
 
         async function calculatePairPnL(pairName, baseFreq, hedgeFreq, optionTenorMinutes, expiryMode) {
@@ -2612,20 +3159,348 @@
             };
         }
 
-        function displayBatchResults() {
+        function displayResultsWithTabs(pnlResults, correlationResults) {
             // Sort pairs by avgPnL
-            const pairResults = Object.entries(batchData.results)
+            const pairResults = Object.entries(pnlResults)
                 .filter(([_, result]) => !result.error)
                 .sort((a, b) => b[1].avgPnL - a[1].avgPnL);
 
-            // Display Top 5 / Bottom 5
-            displayRankings(pairResults);
+            // Generate P&L results HTML
+            const pnlHTML = generatePnLResults(pairResults);
 
-            // Display Currency Groups
-            displayCurrencyGroups(pairResults);
+            // Generate correlation results HTML
+            const corrHTML = generateCorrelationResults(correlationResults);
 
-            // Display Expandable Details
-            displayExpandableDetails(pairResults);
+            // Build tabbed interface
+            let html = `
+                <div class="results-tabs">
+                    <button class="tab-button active" onclick="switchResultsTab('pnl')">
+                        P&L Analysis
+                    </button>
+                    <button class="tab-button" onclick="switchResultsTab('correlation')">
+                        Correlation Analysis
+                    </button>
+                </div>
+
+                <div id="pnlTab" class="results-tab-content active">
+                    ${pnlHTML}
+                </div>
+
+                <div id="correlationTab" class="results-tab-content">
+                    ${corrHTML}
+                </div>
+            `;
+
+            document.getElementById('batchResults').innerHTML = html;
+        }
+
+        function switchResultsTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.results-tabs .tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.results-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+
+        function generatePnLResults(pairResults) {
+            let html = '';
+
+            // Top 5 / Bottom 5 Rankings
+            const top5 = pairResults.slice(0, 5);
+            const bottom5 = pairResults.slice(-5).reverse();
+            const bottom5StartRank = Math.max(1, pairResults.length - bottom5.length + 1);
+
+            html += `
+            <div class="card">
+                <h3 style="text-align: center; background-color: #007bff; color: white; padding: 15px; border-radius: 8px; margin-top: 30px;">TOP 5 PERFORMERS</h3>
+                ${generateRankingTable(top5, 1)}
+            </div>
+
+            <div class="card">
+                <h3 style="text-align: center; background-color: #dc3545; color: white; padding: 15px; border-radius: 8px; margin-top: 30px;">BOTTOM 5 PERFORMERS</h3>
+                ${generateRankingTable(bottom5, bottom5StartRank)}
+            </div>`;
+
+            // Currency Groups
+            const analyzedPairs = [...new Set(pairResults.map(([pair, _]) => pair))]; // Remove duplicates
+            const currencyBlocks = buildCurrencyBlocksFromResults(analyzedPairs, batchData.currencies || []);
+            const sortedCurrencies = Object.keys(currencyBlocks).sort((a, b) =>
+                currencyBlocks[b].length - currencyBlocks[a].length
+            );
+
+            html += '<div id="currencyGroupsContent">';
+            sortedCurrencies.forEach(currency => {
+                const pairsInBlock = currencyBlocks[currency];
+                const pairsWithResults = pairsInBlock
+                    .map(pair => {
+                        const result = pairResults.find(([p, _]) => p === pair);
+                        return result ? [pair, result[1]] : null;
+                    })
+                    .filter(r => r !== null);
+
+                if (pairsWithResults.length === 0) return;
+
+                const groupAvg = pairsWithResults.reduce((sum, [_, result]) => sum + result.avgPnL, 0) / pairsWithResults.length;
+                const currencyName = getCurrencyName(currency);
+
+                html += `<div class="currency-group-section">`;
+                html += `<h3 style="text-align: center; background-color: #007bff; color: white; padding: 10px; border-radius: 4px;">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
+                html += generateCurrencyGroupTable(pairsWithResults);
+                html += `<div style="margin-top: 10px; font-weight: bold; font-size: 16px;">Group Average: ${formatThousand(groupAvg)}</div>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+
+            // Expandable Details
+            html += '<div id="expandableDetailsContent">';
+            pairResults.forEach(([pair, result]) => {
+                const avgColor = getPnLColor(result.avgPnL * 1000);
+                html += `<div class="expandable-pair">`;
+                html += `<div class="pair-header" onclick="togglePairDetails('${pair}')">`;
+                html += `<span style="font-weight: bold; font-size: 16px;">▶ ${pair}</span>`;
+                html += `<span style="background-color: ${avgColor.bg}; color: ${avgColor.text}; padding: 5px 10px; border-radius: 4px; font-weight: bold;">Avg P&L: ${formatThousand(result.avgPnL)}</span>`;
+                html += `</div>`;
+                html += `<div class="pair-details" id="details-${pair}">`;
+
+                // Strike P&L Summary Table
+                html += '<h4>Strike P&L Summary:</h4>';
+                html += '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th></th>';
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    const strikePrice = result.strikes[strikeName].strikePrice;
+                    html += `<th>${strikePrice.toFixed(4)}</th>`;
+                });
+                html += '</tr></thead><tbody><tr><td><strong>Strike</strong></td>';
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    html += `<td>${strikeName}</td>`;
+                });
+                html += '</tr><tr><td><strong>P&L (k)</strong></td>';
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    const pnl = result.strikes[strikeName].finalPnL;
+                    const color = getPnLColor(pnl);
+                    html += `<td style="background-color: ${color.bg}; color: ${color.text}; font-weight: bold;">${formatThousand(pnl)}</td>`;
+                });
+                html += '</tr></tbody></table>';
+
+                // Summary stats
+                html += `<div style="margin-top: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 4px;">`;
+                html += `<strong>Summary:</strong> `;
+                html += `Avg P&L: ${formatThousand(result.avgPnL)} | `;
+                html += `Impl Vol: ${(result.impliedVol * 100).toFixed(2)}% | `;
+                html += `Real Vol: ${(result.realizedVol * 100).toFixed(2)}% | `;
+                html += `Vol Diff: ${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%`;
+                html += `</div>`;
+
+                // View Charts button
+                html += `<button style="margin-top: 15px;" onclick="showBatchPairCharts('${pair}')">View P&L Charts</button>`;
+
+                html += `</div>`;
+                html += `</div>`;
+            });
+            html += '</div>';
+
+            return html;
+        }
+
+        function generateCorrelationResults(correlationResults) {
+            if (!correlationResults || Object.keys(correlationResults).length === 0) {
+                return `
+                <div class="alert alert-warning">
+                    <strong>No correlation data available.</strong>
+                    <p>Correlation analysis requires at least 2 pairs per currency group and cross pair volatilities.</p>
+                </div>`;
+            }
+
+            let html = '';
+
+            // Top 5 / Bottom 5
+            html += generateTopBottomCorrelations(correlationResults);
+
+            // Individual currency group tables
+            const currencies = Object.keys(correlationResults).sort((a, b) => {
+                // USD first, then alphabetical
+                if (a === 'USD') return -1;
+                if (b === 'USD') return 1;
+                return a.localeCompare(b);
+            });
+
+            currencies.forEach(currency => {
+                html += generateCurrencyCorrelationTable(currency, correlationResults[currency]);
+            });
+
+            return html;
+        }
+
+        function generateTopBottomCorrelations(correlationResults) {
+            // Flatten all correlations
+            const allCorrelations = [];
+
+            Object.keys(correlationResults).forEach(currency => {
+                correlationResults[currency].correlations.forEach(corr => {
+                    allCorrelations.push({
+                        ...corr,
+                        currency: currency
+                    });
+                });
+            });
+
+            // Sort by difference (descending)
+            allCorrelations.sort((a, b) => b.difference - a.difference);
+
+            const top5 = allCorrelations.slice(0, 5);
+            const bottom5 = allCorrelations.slice(-5).reverse();
+
+            let html = `
+            <div class="card">
+                <div class="section-header">
+                    <h2>🏆 TOP 5 CORRELATION PERFORMERS (Largest Positive Difference)</h2>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Currency</th>
+                            <th>Pair 1</th>
+                            <th>Pair 2</th>
+                            <th class="numeric-header">Impl Corr</th>
+                            <th class="numeric-header">Real Corr</th>
+                            <th class="numeric-header">Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+            top5.forEach((corr, idx) => {
+                html += `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td><strong>${corr.currency}</strong></td>
+                        <td>${corr.pair1}</td>
+                        <td>${corr.pair2}</td>
+                        <td class="data-table-numbers">${formatCorrelation(corr.impliedCorr)}</td>
+                        <td class="data-table-numbers">${formatCorrelation(corr.realizedCorr)}</td>
+                        <td class="data-table-numbers ${corr.difference >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                            ${formatCorrelationDiff(corr.difference)}
+                        </td>
+                    </tr>`;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="section-header">
+                    <h2>📉 BOTTOM 5 CORRELATION PERFORMERS (Smallest/Most Negative Difference)</h2>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Currency</th>
+                            <th>Pair 1</th>
+                            <th>Pair 2</th>
+                            <th class="numeric-header">Impl Corr</th>
+                            <th class="numeric-header">Real Corr</th>
+                            <th class="numeric-header">Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+            const startRank = Math.max(1, allCorrelations.length - 4); // Rank from bottom
+
+            bottom5.forEach((corr, idx) => {
+                html += `
+                    <tr>
+                        <td>${startRank + idx}</td>
+                        <td><strong>${corr.currency}</strong></td>
+                        <td>${corr.pair1}</td>
+                        <td>${corr.pair2}</td>
+                        <td class="data-table-numbers">${formatCorrelation(corr.impliedCorr)}</td>
+                        <td class="data-table-numbers">${formatCorrelation(corr.realizedCorr)}</td>
+                        <td class="data-table-numbers ${corr.difference >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                            ${formatCorrelationDiff(corr.difference)}
+                        </td>
+                    </tr>`;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            </div>`;
+
+            return html;
+        }
+
+        function generateCurrencyCorrelationTable(currency, groupData) {
+            const currencyName = getCurrencyName(currency);
+            const correlations = [...groupData.correlations]; // Copy to avoid mutating original
+
+            // Sort by difference descending
+            correlations.sort((a, b) => b.difference - a.difference);
+
+            let html = `
+            <div class="card">
+                <div class="section-header">
+                    <h2>💱 ${currencyName} Correlations</h2>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Pair 1</th>
+                            <th>Pair 2</th>
+                            <th class="numeric-header">Impl Corr</th>
+                            <th class="numeric-header">Real Corr</th>
+                            <th class="numeric-header">Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+            correlations.forEach(corr => {
+                html += `
+                    <tr>
+                        <td><strong>${corr.pair1}</strong></td>
+                        <td><strong>${corr.pair2}</strong></td>
+                        <td class="data-table-numbers">${formatCorrelation(corr.impliedCorr)}</td>
+                        <td class="data-table-numbers">${formatCorrelation(corr.realizedCorr)}</td>
+                        <td class="data-table-numbers ${corr.difference >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                            ${formatCorrelationDiff(corr.difference)}
+                        </td>
+                    </tr>`;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+
+                <div class="summary-bar" style="margin-top: 20px;">
+                    <div class="summary-item">
+                        <div class="summary-label">Avg Impl Corr</div>
+                        <div class="summary-value">${formatCorrelation(groupData.avgImpliedCorr)}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Avg Real Corr</div>
+                        <div class="summary-value">${formatCorrelation(groupData.avgRealizedCorr)}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Avg Difference</div>
+                        <div class="summary-value ${groupData.avgDifference >= 0 ? 'positive' : 'negative'}">
+                            ${formatCorrelationDiff(groupData.avgDifference)}
+                        </div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Correlations</div>
+                        <div class="summary-value">${groupData.count}</div>
+                    </div>
+                </div>
+            </div>`;
+
+            return html;
         }
 
         function displayRankings(pairResults) {
@@ -2675,8 +3550,8 @@
         }
 
         function displayCurrencyGroups(pairResults) {
-            // Get all analyzed pairs
-            const analyzedPairs = pairResults.map(([pair, _]) => pair);
+            // Get all analyzed pairs (remove duplicates)
+            const analyzedPairs = [...new Set(pairResults.map(([pair, _]) => pair))];
             
             // Build currency blocks from results - show ALL pairs containing each currency
             const currencyBlocks = buildCurrencyBlocksFromResults(analyzedPairs, batchData.currencies || []);
@@ -2733,6 +3608,37 @@
             });
 
             return blocks;
+        }
+
+        function generateCurrencyGroupTableForResults(pairs) {
+            // This version takes pairs as [pair, result] tuples
+            let html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
+            html += '<th>Pair</th><th style="text-align: right;">Avg P&L</th>';
+            html += '<th style="text-align: right;">10Δ Put</th><th style="text-align: right;">25Δ Put</th><th style="text-align: right;">ATM Call</th><th style="text-align: right;">25Δ Call</th><th style="text-align: right;">10Δ Call</th>';
+            html += '<th style="text-align: right;">Real Vol</th><th style="text-align: right;">Impl Vol</th><th style="text-align: right;">Vol Diff</th>';
+            html += '</tr></thead><tbody>';
+
+            pairs.forEach(([pair, result]) => {
+                const avgColor = getPnLColor(result.avgPnL * 1000);
+
+                html += '<tr>';
+                html += `<td style="font-weight: bold;">${pair}</td>`;
+                html += `<td style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
+
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    const pnl = result.strikes[strikeName].finalPnL;
+                    const color = getPnLColor(pnl);
+                    html += `<td style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
+                });
+
+                html += `<td>${(result.realizedVol * 100).toFixed(2)}%</td>`;
+                html += `<td>${(result.impliedVol * 100).toFixed(2)}%</td>`;
+                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            return html;
         }
 
         function generateCurrencyGroupTable(pairs) {
