@@ -508,6 +508,27 @@
 
         /* Alert Boxes */
         .info-box,
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 12px 0;
+        }
+
+        .alert-warning {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            color: #92400e;
+        }
+
+        .alert-warning ul {
+            margin-top: 8px;
+            margin-left: 20px;
+        }
+
+        .alert-warning li {
+            margin: 4px 0;
+        }
+
         .verification,
         .warning,
         .error {
@@ -801,6 +822,28 @@
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
             gap: 12px;
             margin-top: 16px;
+        }
+
+        .pair-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .pair-group {
+            margin-bottom: 24px;
+            padding: 16px;
+            background-color: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+
+        .pair-group h4 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: #1f2937;
+            font-size: 16px;
         }
 
         .pair-checkbox {
@@ -1204,10 +1247,27 @@
                     <div class="upload-requirements">
                         <div class="info-box" style="margin-top: 0;">
                             <div>
-                            <strong>File Requirements:</strong><br>
-                            • Excel file (.xlsx) with two sheets: "Spot Data" and "Implied Vols"<br>
-                            • Spot Data: Timestamp column + currency pair columns<br>
-                            • Implied Vols: Pair names + ImpliedVol (as decimals, e.g., 0.105 = 10.5%)
+                            <h4>Required Excel Format:</h4>
+                            
+                            <div style="margin-bottom: 16px;">
+                                <strong>Sheet 1: "Spot Data"</strong><br>
+                                • Column A: Timestamps<br>
+                                • Other columns: <strong>USD pairs ONLY</strong><br>
+                                • Format: EURUSD, GBPUSD, USDJPY, USDCAD, etc.<br>
+                                • <strong>Do NOT include cross pairs</strong> (e.g., EURGBP, EURJPY)<br>
+                                • Supports any USD pair (G10, EM, all currencies)
+                            </div>
+                            
+                            <div>
+                                <strong>Sheet 2: "Implied Vols"</strong><br>
+                                • Column A: Pair names (USD pairs + crosses)<br>
+                                • Column B: Volatilities (as decimals, e.g., 0.08 for 8%)<br>
+                                • Include vols for ALL desired pairs:<br>
+                                &nbsp;&nbsp;- USD pairs: EURUSD, GBPUSD, USDJPY, etc.<br>
+                                &nbsp;&nbsp;- Cross pairs: EURGBP, EURJPY, CADCHF, etc.<br>
+                                • <strong>Only crosses with vols will be available</strong><br>
+                                • Your cross pair labels determine the quote convention
+                            </div>
                             </div>
                         </div>
                     </div>
@@ -1216,6 +1276,7 @@
 
             <!-- Upload Status -->
             <div id="uploadStatus"></div>
+            <div id="uploadWarnings"></div>
 
             <!-- Configuration Card -->
             <div class="card" style="display: none;" id="batchConfigSection">
@@ -1403,7 +1464,11 @@
             pairNames: [],
             spotPrices: {},
             impliedVols: {},
-            results: {}
+            results: {},
+            usdPairs: [],
+            currencies: [],
+            availableCrosses: [],
+            unavailableCrosses: []
         };
 
         function handleExcelUpload(event) {
@@ -1446,43 +1511,86 @@
 
                     // Extract currency pairs (all columns except Timestamp)
                     const allKeys = Object.keys(validData[0]);
-                    batchData.pairNames = allKeys.filter(key =>
+                    const spotColumns = allKeys.filter(key =>
                         key !== 'Timestamp' && key !== 'timestamp' && key.trim() !== ''
                     );
 
-                    // Extract spot prices for each pair
-                    batchData.spotPrices = {};
-                    batchData.pairNames.forEach(pair => {
+                    // Extract spot prices for all columns first (for validation)
+                    const tempSpotPrices = {};
+                    spotColumns.forEach(pair => {
                         const prices = validData.map(row => parseFloat(row[pair]));
                         // Validate all prices are positive numbers
                         if (prices.some(p => isNaN(p) || p <= 0)) {
                             throw new Error(`Invalid spot prices found for pair: ${pair}`);
                         }
-                        batchData.spotPrices[pair] = prices;
+                        tempSpotPrices[pair] = prices;
                     });
 
                     // Parse Implied Vols sheet
                     const volSheet = workbook.Sheets['Implied Vols'];
                     const volData = XLSX.utils.sheet_to_json(volSheet);
 
-                    batchData.impliedVols = {};
+                    const tempImpliedVols = {};
                     volData.forEach(row => {
                         const pairName = row.Pair || row.pair;
+                        if (!pairName) return; // Skip empty rows
                         const volValue = parseFloat(row.ImpliedVol || row.impliedvol || row.impliedVol);
 
                         if (isNaN(volValue) || volValue <= 0) {
                             throw new Error(`Invalid implied vol for pair: ${pairName}`);
                         }
 
-                        batchData.impliedVols[pairName] = volValue;
+                        tempImpliedVols[pairName] = volValue;
                     });
 
-                    // Validate all pairs have implied vols
-                    const missingVols = batchData.pairNames.filter(pair => !batchData.impliedVols[pair]);
-                    if (missingVols.length > 0) {
-                        showBatchMessage(`Error: Missing implied vols for pairs: ${missingVols.join(', ')}`, 'error');
+                    // Validate upload for cross derivation
+                    const validation = validateUploadForCrossDerivation(tempSpotPrices, tempImpliedVols);
+                    if (!validation.valid) {
+                        showBatchMessage('Upload failed:\n\n' + validation.errors.join('\n'), 'error');
                         return;
                     }
+
+                    // Store USD pairs and currencies
+                    batchData.usdPairs = validation.usdPairs;
+                    batchData.currencies = validation.currencies;
+
+                    // Extract spot prices only for USD pairs
+                    batchData.spotPrices = {};
+                    batchData.usdPairs.forEach(pair => {
+                        batchData.spotPrices[pair] = tempSpotPrices[pair];
+                    });
+
+                    // Store all implied vols (USD pairs + crosses)
+                    batchData.impliedVols = tempImpliedVols;
+
+                    // Filter available crosses
+                    const { availableCrosses, unavailableCrosses } = filterAvailableCrosses(
+                        batchData.impliedVols,
+                        batchData.usdPairs,
+                        batchData.currencies
+                    );
+                    batchData.availableCrosses = availableCrosses;
+                    batchData.unavailableCrosses = unavailableCrosses;
+
+                    // Show warnings if any
+                    if (validation.warnings.length > 0 || unavailableCrosses.length > 0) {
+                        let warningHTML = '<div class="alert alert-warning" style="margin-top: 10px;"><strong>Upload Successful with Warnings:</strong><ul>';
+                        validation.warnings.forEach(w => {
+                            warningHTML += `<li>${w}</li>`;
+                        });
+                        if (unavailableCrosses.length > 0) {
+                            warningHTML += '<li><strong>Cross pairs with vols but missing USD pairs:</strong><ul>';
+                            unavailableCrosses.forEach(item => {
+                                warningHTML += `<li>${item.pair} - ${item.reason}</li>`;
+                            });
+                            warningHTML += '</ul></li>';
+                        }
+                        warningHTML += '</ul></div>';
+                        document.getElementById('uploadWarnings').innerHTML = warningHTML;
+                    }
+
+                    // Set pairNames to USD pairs only (crosses will be derived later)
+                    batchData.pairNames = batchData.usdPairs;
 
                     // Calculate time period
                     const numPoints = batchData.timestamps.length;
@@ -1511,7 +1619,9 @@
                         `✓ Data Time Range: ${startStr} → ${endStr}<br>` +
                         `✓ Total Duration: ${totalMinutes} minutes (${totalHours.toFixed(1)} hours)<br>` +
                         `✓ Frequency auto-detected: ${batchData.frequency} minutes<br>` +
-                        `✓ Found ${batchData.pairNames.length} currency pairs with complete data`,
+                        `✓ Found ${batchData.usdPairs.length} USD pairs<br>` +
+                        `✓ Available currencies: ${batchData.currencies.join(', ')}<br>` +
+                        `✓ Available cross pairs: ${batchData.availableCrosses.length}`,
                         'verification'
                     );
 
@@ -1523,7 +1633,7 @@
                     document.getElementById('batchBaseFrequency').value = batchData.frequency;
                     document.getElementById('analysisWindowSection').style.display = 'block';
                     initializeAnalysisWindow();
-                    populatePairCheckboxes();
+                    displayPairSelection();
                     document.getElementById('pairSelectionSection').style.display = 'block';
 
                 } catch (error) {
@@ -1533,6 +1643,219 @@
             };
 
             reader.readAsArrayBuffer(file);
+        }
+
+        // ============ CROSS PAIR CALCULATION FUNCTIONS ============
+
+        function parseUSDPairs(spotDataColumns) {
+            const usdPairs = [];
+            const currencies = new Set(['USD']); // Always include USD
+
+            spotDataColumns.forEach(column => {
+                if (column === 'Timestamp' || column === 'timestamp') return;
+
+                // Check if it's a USD pair (contains 'USD')
+                if (column.includes('USD')) {
+                    usdPairs.push(column);
+
+                    // Extract the non-USD currency
+                    if (column.startsWith('USD')) {
+                        // USD/XXX format (e.g., USDJPY, USDKRW, USDINR)
+                        const ccy = column.substring(3, 6);
+                        currencies.add(ccy);
+                    } else {
+                        // XXX/USD format (e.g., EURUSD, GBPUSD)
+                        const ccy = column.substring(0, 3);
+                        currencies.add(ccy);
+                    }
+                } else {
+                    console.warn(`Ignoring non-USD pair in Spot Data: ${column}`);
+                }
+            });
+
+            return {
+                usdPairs: usdPairs,
+                currencies: Array.from(currencies).sort()
+            };
+        }
+
+        function parseCrossPair(crossPairName) {
+            // crossPairName is 6 characters, e.g., "CADCHF", "EURGBP", "ZARJPY"
+            return {
+                base: crossPairName.substring(0, 3),   // First 3 chars
+                quote: crossPairName.substring(3, 6)   // Last 3 chars
+            };
+        }
+
+        function calculateCrossRate(crossPairName, usdPairData, usdPairs, timeIndex) {
+            const { base, quote } = parseCrossPair(crossPairName);
+
+            // Helper function: Get XXX/USD rate for any currency
+            function getUSDRate(currency) {
+                if (currency === 'USD') return 1.0;
+
+                const directPair = currency + 'USD';   // e.g., EURUSD
+                const indirectPair = 'USD' + currency; // e.g., USDJPY
+
+                if (usdPairs.includes(directPair)) {
+                    // Already in XXX/USD format - use directly
+                    return usdPairData[directPair][timeIndex];
+                } else if (usdPairs.includes(indirectPair)) {
+                    // USD/XXX format - invert to get XXX/USD
+                    const usdXXXRate = usdPairData[indirectPair][timeIndex];
+                    return 1.0 / usdXXXRate;
+                } else {
+                    throw new Error(`No USD pair found for ${currency}`);
+                }
+            }
+
+            // Get both currencies in XXX/USD terms
+            const baseUSD = getUSDRate(base);    // BASE/USD
+            const quoteUSD = getUSDRate(quote);  // QUOTE/USD
+
+            // Calculate cross rate: BASE/QUOTE = (BASE/USD) / (QUOTE/USD)
+            return baseUSD / quoteUSD;
+        }
+
+        function deriveCrossSeries(crossPairName, usdPairData, usdPairs, timestamps) {
+            const crossSeries = [];
+
+            for (let i = 0; i < timestamps.length; i++) {
+                try {
+                    const crossRate = calculateCrossRate(crossPairName, usdPairData, usdPairs, i);
+                    crossSeries.push(crossRate);
+                } catch (error) {
+                    console.error(`Error calculating ${crossPairName} at ${timestamps[i]}:`, error.message);
+                    return null; // Return null if any calculation fails
+                }
+            }
+
+            return crossSeries;
+        }
+
+        function filterAvailableCrosses(impliedVols, usdPairs, currencies) {
+            const availableCrosses = [];
+            const unavailableCrosses = [];
+
+            Object.keys(impliedVols).forEach(pair => {
+                // Skip USD pairs (we already have spot data for these)
+                if (pair.includes('USD')) return;
+
+                // Parse cross pair
+                const { base, quote } = parseCrossPair(pair);
+
+                // Check if both currencies are available in our USD pairs
+                if (currencies.includes(base) && currencies.includes(quote)) {
+                    availableCrosses.push(pair);
+                } else {
+                    unavailableCrosses.push({
+                        pair: pair,
+                        reason: `Missing USD pair for ${!currencies.includes(base) ? base : quote}`
+                    });
+                }
+            });
+
+            // Log unavailable crosses for user visibility
+            if (unavailableCrosses.length > 0) {
+                console.warn('The following crosses have vols but cannot be calculated (missing USD pairs):');
+                unavailableCrosses.forEach(item => {
+                    console.warn(`  ${item.pair}: ${item.reason}`);
+                });
+            }
+
+            return { availableCrosses, unavailableCrosses };
+        }
+
+        function validateUploadForCrossDerivation(spotData, impliedVols) {
+            const errors = [];
+            const warnings = [];
+
+            // 1. Validate Spot Data contains only USD pairs
+            const spotColumns = Object.keys(spotData).filter(col => col !== 'Timestamp' && col !== 'timestamp');
+            spotColumns.forEach(column => {
+                if (!column.includes('USD')) {
+                    errors.push(`Invalid column in Spot Data: "${column}". Only USD pairs are allowed.`);
+                }
+            });
+
+            if (errors.length > 0) return { valid: false, errors, warnings };
+
+            // 2. Parse USD pairs and currencies
+            const { usdPairs, currencies } = parseUSDPairs(spotColumns);
+
+            if (usdPairs.length === 0) {
+                errors.push('No USD pairs found in Spot Data. Please upload at least one USD pair.');
+                return { valid: false, errors, warnings };
+            }
+
+            // 3. Check cross pairs in vol sheet
+            const crossPairs = Object.keys(impliedVols).filter(p => !p.includes('USD'));
+
+            crossPairs.forEach(crossPair => {
+                if (crossPair.length !== 6) {
+                    warnings.push(`Invalid cross pair format: "${crossPair}". Must be 6 characters (e.g., EURGBP).`);
+                    return;
+                }
+
+                const { base, quote } = parseCrossPair(crossPair);
+
+                if (!currencies.includes(base)) {
+                    warnings.push(`Cannot calculate ${crossPair}: Missing USD pair for ${base}`);
+                }
+                if (!currencies.includes(quote)) {
+                    warnings.push(`Cannot calculate ${crossPair}: Missing USD pair for ${quote}`);
+                }
+            });
+
+            // 4. Check for missing vols in USD pairs
+            usdPairs.forEach(pair => {
+                if (impliedVols[pair] === undefined) {
+                    warnings.push(`USD pair ${pair} has spot data but no implied vol. It will be excluded from analysis.`);
+                }
+            });
+
+            return { valid: true, errors: [], warnings, usdPairs, currencies };
+        }
+
+        function getCurrencyName(code) {
+            const names = {
+                'EUR': 'EUR - Euro',
+                'GBP': 'GBP - British Pound',
+                'AUD': 'AUD - Australian Dollar',
+                'NZD': 'NZD - New Zealand Dollar',
+                'JPY': 'JPY - Japanese Yen',
+                'CHF': 'CHF - Swiss Franc',
+                'CAD': 'CAD - Canadian Dollar',
+                'SGD': 'SGD - Singapore Dollar',
+                'CNH': 'CNH - Chinese Yuan (Offshore)',
+                'THB': 'THB - Thai Baht',
+                'ZAR': 'ZAR - South African Rand',
+                'MXN': 'MXN - Mexican Peso',
+                'KRW': 'KRW - Korean Won',
+                'INR': 'INR - Indian Rupee',
+                'TRY': 'TRY - Turkish Lira',
+                'BRL': 'BRL - Brazilian Real'
+            };
+
+            return names[code] || `${code} - ${code}`;
+        }
+
+        function buildCrossBlocks(availableCrosses, currencies) {
+            const blocks = {};
+
+            currencies.forEach(currency => {
+                if (currency === 'USD') return; // Skip USD
+
+                const pairsInBlock = availableCrosses.filter(pair =>
+                    pair.includes(currency)
+                );
+
+                if (pairsInBlock.length > 0) {
+                    blocks[currency] = pairsInBlock.sort();
+                }
+            });
+
+            return blocks;
         }
 
         function detectFrequency(timestamps) {
@@ -1581,36 +1904,134 @@
             return diffMinutes;
         }
 
-        function populatePairCheckboxes() {
-            const grid = document.getElementById('pairCheckboxGrid');
-            grid.innerHTML = '';
+        function displayPairSelection() {
+            const usdPairs = batchData.usdPairs || [];
+            const availableCrosses = batchData.availableCrosses || [];
+            const currencies = batchData.currencies || [];
 
-            batchData.pairNames.forEach(pair => {
-                const label = document.createElement('label');
-                label.className = 'pair-checkbox';
-                label.innerHTML = `
-                    <input type="checkbox" class="pair-checkbox-input" value="${pair}" onchange="updatePairCount()" checked>
-                    <span>${pair}</span>
+            let html = `
+                <div class="card-header">
+                    Select Currency Pairs to Analyze
+                    <span class="pair-counter" id="pairCounter">0 selected</span>
+                </div>
+
+                <div id="crossWarnings"></div>
+            `;
+
+            // Display warnings for unavailable crosses
+            if (batchData.unavailableCrosses && batchData.unavailableCrosses.length > 0) {
+                html += `
+                    <div class="alert alert-warning" style="margin: 16px 0;">
+                        <strong>Note:</strong> ${batchData.unavailableCrosses.length} cross pair(s) have implied vols 
+                        but cannot be calculated because required USD pairs are missing:
+                        <ul style="margin-top: 8px;">
+                            ${batchData.unavailableCrosses.map(item =>
+                                `<li>${item.pair} - ${item.reason}</li>`
+                            ).join('')}
+                        </ul>
+                    </div>
                 `;
-                grid.appendChild(label);
+            }
+
+            // USD Pairs section
+            html += `
+                <div class="pair-group" style="margin-bottom: 24px;">
+                    <h4>USD Pairs (${usdPairs.length} available)</h4>
+                    <div class="pair-grid" id="usdPairGrid">`;
+
+            usdPairs.forEach(pair => {
+                html += `
+                    <label class="pair-checkbox">
+                        <input type="checkbox" name="pair" value="${pair}" checked onchange="updatePairCounter()">
+                        <span>${pair}</span>
+                    </label>`;
             });
 
-            updatePairCount();
+            html += `
+                    </div>
+                </div>`;
+
+            // Build currency blocks for crosses
+            const crossBlocks = buildCrossBlocks(availableCrosses, currencies);
+
+            // Display each currency block
+            Object.keys(crossBlocks).sort().forEach(currency => {
+                const pairs = crossBlocks[currency];
+                const currencyName = getCurrencyName(currency);
+
+                html += `
+                <div class="pair-group" style="margin-bottom: 24px;">
+                    <h4>${currencyName} Crosses (${pairs.length} available)</h4>
+                    <div class="pair-grid" id="${currency}CrossGrid">`;
+
+                pairs.forEach(pair => {
+                    html += `
+                        <label class="pair-checkbox">
+                            <input type="checkbox" name="pair" value="${pair}" checked onchange="updatePairCounter()">
+                            <span>${pair}</span>
+                        </label>`;
+                });
+
+                html += `
+                    </div>
+                </div>`;
+            });
+
+            // Selection buttons
+            html += `
+                <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="selectAllPairs()">Select All</button>
+                    <button class="btn btn-secondary" onclick="deselectAllPairs()">Deselect All</button>
+                    <button class="btn btn-secondary" onclick="selectUSDOnly()">USD Pairs Only</button>
+                    <button class="btn btn-secondary" onclick="selectG10Only()">G10 Only</button>
+                </div>
+
+                <button class="btn btn-primary btn-large" onclick="startBatchCalculation()" 
+                        style="width: 100%; margin-top: 24px;">
+                    Calculate Selected Pairs
+                </button>
+            `;
+
+            const section = document.getElementById('pairSelectionSection');
+            section.innerHTML = html;
+            section.style.display = 'block';
+
+            updatePairCounter();
         }
 
         function selectAllPairs() {
-            document.querySelectorAll('.pair-checkbox-input').forEach(cb => cb.checked = true);
-            updatePairCount();
+            document.querySelectorAll('input[name="pair"]').forEach(cb => cb.checked = true);
+            updatePairCounter();
         }
 
         function deselectAllPairs() {
-            document.querySelectorAll('.pair-checkbox-input').forEach(cb => cb.checked = false);
-            updatePairCount();
+            document.querySelectorAll('input[name="pair"]').forEach(cb => cb.checked = false);
+            updatePairCounter();
         }
 
-        function updatePairCount() {
-            const checked = document.querySelectorAll('.pair-checkbox-input:checked').length;
-            document.getElementById('pairSelectionCount').textContent = `${checked} selected`;
+        function selectUSDOnly() {
+            document.querySelectorAll('input[name="pair"]').forEach(cb => {
+                cb.checked = cb.value.includes('USD');
+            });
+            updatePairCounter();
+        }
+
+        function selectG10Only() {
+            const g10Currencies = ['EUR', 'GBP', 'AUD', 'NZD', 'JPY', 'CHF', 'CAD'];
+            document.querySelectorAll('input[name="pair"]').forEach(cb => {
+                const pair = cb.value;
+                const hasG10 = g10Currencies.some(ccy => pair.includes(ccy));
+                cb.checked = hasG10;
+            });
+            updatePairCounter();
+        }
+
+        function updatePairCounter() {
+            const checked = document.querySelectorAll('input[name="pair"]:checked').length;
+            const counter = document.getElementById('pairCounter');
+            if (counter) {
+                counter.textContent = `${checked} selected`;
+            }
         }
 
         function showBatchMessage(message, type = 'verification') {
@@ -1634,7 +2055,11 @@
                 pairNames: [],
                 frequency: 10,
                 results: {},
-                fullDataRange: null
+                fullDataRange: null,
+                usdPairs: [],
+                currencies: [],
+                availableCrosses: [],
+                unavailableCrosses: []
             };
 
             // Clear file input
@@ -1932,7 +2357,7 @@
 
         async function startBatchCalculation() {
             // Get selected pairs
-            const selectedPairs = Array.from(document.querySelectorAll('.pair-checkbox-input:checked'))
+            const selectedPairs = Array.from(document.querySelectorAll('input[name="pair"]:checked'))
                 .map(cb => cb.value);
 
             if (selectedPairs.length === 0) {
@@ -1940,10 +2365,59 @@
                 return;
             }
 
+            const usdPairs = selectedPairs.filter(p => p.includes('USD'));
+            const crossPairs = selectedPairs.filter(p => !p.includes('USD'));
+
+            console.log(`Analyzing ${usdPairs.length} USD pairs and ${crossPairs.length} cross pairs`);
+
             // Hide pair selection, show progress
             document.getElementById('pairSelectionSection').style.display = 'none';
             document.getElementById('progressSection').style.display = 'block';
             document.getElementById('batchResults').style.display = 'none';
+
+            // Derive cross pair spot series
+            const allSpotData = { ...batchData.spotPrices }; // Start with USD pairs
+            let derivedCount = 0;
+
+            if (crossPairs.length > 0) {
+                document.getElementById('currentPairText').textContent = `Deriving cross pair spot series...`;
+                document.getElementById('progressFill').style.width = '5%';
+                document.getElementById('progressText').textContent = '5%';
+
+                for (let i = 0; i < crossPairs.length; i++) {
+                    const crossPair = crossPairs[i];
+                    const progress = 5 + ((i + 1) / crossPairs.length) * 10;
+                    document.getElementById('progressFill').style.width = progress + '%';
+                    document.getElementById('progressText').textContent = Math.round(progress) + '%';
+                    document.getElementById('currentPairText').textContent = `Deriving ${crossPair}...`;
+
+                    const crossSeries = deriveCrossSeries(
+                        crossPair,
+                        batchData.spotPrices,
+                        batchData.usdPairs,
+                        batchData.timestamps
+                    );
+
+                    if (crossSeries) {
+                        allSpotData[crossPair] = crossSeries;
+                        derivedCount++;
+                        console.log(`✓ Derived ${crossPair}`);
+                    } else {
+                        console.error(`✗ Failed to derive ${crossPair}, excluding from analysis`);
+                        const index = selectedPairs.indexOf(crossPair);
+                        if (index > -1) {
+                            selectedPairs.splice(index, 1);
+                        }
+                    }
+
+                    // Allow UI to update
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+            }
+
+            // Update batchData with derived cross series
+            batchData.spotPrices = allSpotData;
+            batchData.pairNames = selectedPairs;
 
             // Get configuration
             const baseFreq = parseInt(document.getElementById('batchBaseFrequency').value);
@@ -2035,9 +2509,13 @@
             batchData.analysisWindow = analysisData.analysisWindow || null;
 
             // Calculate for each pair sequentially
+            const totalPairs = selectedPairs.length;
+            const startProgress = crossPairs.length > 0 ? 15 : 0; // Reserve 15% for cross derivation if needed
+            const calculationProgressRange = 100 - startProgress;
+
             for (let i = 0; i < selectedPairs.length; i++) {
                 const pair = selectedPairs[i];
-                const progress = ((i + 1) / selectedPairs.length) * 100;
+                const progress = startProgress + ((i + 1) / totalPairs) * calculationProgressRange;
 
                 // Update progress
                 document.getElementById('progressFill').style.width = progress + '%';
@@ -2197,30 +2675,64 @@
         }
 
         function displayCurrencyGroups(pairResults) {
-            const currencies = ['USD', 'EUR', 'JPY', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'SEK', 'NOK', 'DKK'];
-            const groups = {};
-
-            // Group pairs by currency
-            currencies.forEach(currency => {
-                groups[currency] = pairResults.filter(([pair, _]) => pair.includes(currency));
-            });
+            // Get all analyzed pairs
+            const analyzedPairs = pairResults.map(([pair, _]) => pair);
+            
+            // Build currency blocks from results - show ALL pairs containing each currency
+            const currencyBlocks = buildCurrencyBlocksFromResults(analyzedPairs, batchData.currencies || []);
 
             // Generate HTML for each non-empty group
             let html = '';
-            Object.entries(groups).forEach(([currency, pairs]) => {
-                if (pairs.length === 0) return;
+            
+            // Sort currencies by number of pairs (descending)
+            const sortedCurrencies = Object.keys(currencyBlocks).sort((a, b) =>
+                currencyBlocks[b].length - currencyBlocks[a].length
+            );
+
+            sortedCurrencies.forEach(currency => {
+                const pairsInBlock = currencyBlocks[currency];
+                
+                // Get results for these pairs
+                const pairsWithResults = pairsInBlock
+                    .map(pair => {
+                        const result = pairResults.find(([p, _]) => p === pair);
+                        return result ? [pair, result[1]] : null;
+                    })
+                    .filter(r => r !== null);
+
+                if (pairsWithResults.length === 0) return;
 
                 // Calculate group average
-                const groupAvg = pairs.reduce((sum, [_, result]) => sum + result.avgPnL, 0) / pairs.length;
+                const groupAvg = pairsWithResults.reduce((sum, [_, result]) => sum + result.avgPnL, 0) / pairsWithResults.length;
+                const currencyName = getCurrencyName(currency);
 
                 html += `<div class="currency-group-section">`;
-                html += `<h3 style="text-align: center; background-color: #007bff; color: white; padding: 10px; border-radius: 4px;">${currency} PAIRS</h3>`;
-                html += generateCurrencyGroupTable(pairs);
+                html += `<h3 style="text-align: center; background-color: #007bff; color: white; padding: 10px; border-radius: 4px;">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
+                html += generateCurrencyGroupTable(pairsWithResults);
                 html += `<div style="margin-top: 10px; font-weight: bold; font-size: 16px;">Group Average: ${formatThousand(groupAvg)}</div>`;
                 html += `</div>`;
             });
 
             document.getElementById('currencyGroupsContent').innerHTML = html;
+        }
+
+        function buildCurrencyBlocksFromResults(analyzedPairs, currencies) {
+            const blocks = {};
+
+            // For each currency (except USD), find ALL pairs that include it
+            currencies.forEach(currency => {
+                if (currency === 'USD') return; // Skip USD block (would be too large)
+
+                const pairsInBlock = analyzedPairs.filter(pair =>
+                    pair.includes(currency)
+                );
+
+                if (pairsInBlock.length > 0) {
+                    blocks[currency] = pairsInBlock;
+                }
+            });
+
+            return blocks;
         }
 
         function generateCurrencyGroupTable(pairs) {
