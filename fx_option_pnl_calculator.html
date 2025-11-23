@@ -415,13 +415,34 @@
             background-color: transparent;
         }
 
-        /* Table numbers */
+        /* Numeric headers - RIGHT aligned */
+        .numeric-header {
+            text-align: right !important;
+        }
+
+        /* Table numbers - RIGHT aligned with monospace font */
         .data-table-numbers,
-        td[style*="text-align: right"],
-        td:nth-child(n+2) {
+        td[style*="text-align: right"] {
             font-family: 'SF Mono', Monaco, 'Courier New', monospace;
             text-align: right;
             font-variant-numeric: tabular-nums;
+            min-width: 90px;
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        /* Numeric headers should also have consistent width */
+        .numeric-header {
+            min-width: 90px;
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        /* Pair columns should use regular font, not monospace, and left align */
+        .data-table td:has(strong),
+        .data-table td:not(.data-table-numbers) {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-align: left;
         }
 
         /* Strike tables */
@@ -3464,8 +3485,8 @@
             correlations.forEach(corr => {
                 html += `
                     <tr>
-                        <td><strong>${corr.pair1}</strong></td>
-                        <td><strong>${corr.pair2}</strong></td>
+                        <td>${corr.pair1}</td>
+                        <td>${corr.pair2}</td>
                         <td class="data-table-numbers">${formatCorrelation(corr.impliedCorr)}</td>
                         <td class="data-table-numbers">${formatCorrelation(corr.realizedCorr)}</td>
                         <td class="data-table-numbers ${corr.difference >= 0 ? 'pnl-positive' : 'pnl-negative'}">
@@ -3517,10 +3538,10 @@
         }
 
         function generateRankingTable(pairs, startRank) {
-            let html = '<table class="ranking-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Rank</th><th>Pair</th><th style="text-align: right;">Avg P&L</th>';
-            html += '<th style="text-align: right;">10Δ Put</th><th style="text-align: right;">25Δ Put</th><th style="text-align: right;">ATM Call</th><th style="text-align: right;">25Δ Call</th><th style="text-align: right;">10Δ Call</th>';
-            html += '<th style="text-align: right;">Real Vol</th><th style="text-align: right;">Impl Vol</th><th style="text-align: right;">Vol Diff</th>';
+            let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
+            html += '<th>Rank</th><th>Pair</th><th class="numeric-header">Avg P&L</th>';
+            html += '<th class="numeric-header">10Δ Put</th><th class="numeric-header">25Δ Put</th><th class="numeric-header">ATM Call</th><th class="numeric-header">25Δ Call</th><th class="numeric-header">10Δ Call</th>';
+            html += '<th class="numeric-header">Real Vol</th><th class="numeric-header">Impl Vol</th><th class="numeric-header">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result], idx) => {
@@ -3530,18 +3551,18 @@
                 html += '<tr>';
                 html += `<td>${rank}</td>`;
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
 
                 // Individual strike P&Ls
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
-                    html += `<td style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
+                    html += `<td class="data-table-numbers" style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
                 });
 
-                html += `<td>${(result.realizedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${(result.impliedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${(result.impliedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
                 html += '</tr>';
             });
 
@@ -3612,10 +3633,10 @@
 
         function generateCurrencyGroupTableForResults(pairs) {
             // This version takes pairs as [pair, result] tuples
-            let html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Pair</th><th style="text-align: right;">Avg P&L</th>';
-            html += '<th style="text-align: right;">10Δ Put</th><th style="text-align: right;">25Δ Put</th><th style="text-align: right;">ATM Call</th><th style="text-align: right;">25Δ Call</th><th style="text-align: right;">10Δ Call</th>';
-            html += '<th style="text-align: right;">Real Vol</th><th style="text-align: right;">Impl Vol</th><th style="text-align: right;">Vol Diff</th>';
+            let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
+            html += '<th>Pair</th><th class="numeric-header">Avg P&L</th>';
+            html += '<th class="numeric-header">10Δ Put</th><th class="numeric-header">25Δ Put</th><th class="numeric-header">ATM Call</th><th class="numeric-header">25Δ Call</th><th class="numeric-header">10Δ Call</th>';
+            html += '<th class="numeric-header">Real Vol</th><th class="numeric-header">Impl Vol</th><th class="numeric-header">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result]) => {
@@ -3623,17 +3644,17 @@
 
                 html += '<tr>';
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
-                    html += `<td style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
+                    html += `<td class="data-table-numbers" style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
                 });
 
-                html += `<td>${(result.realizedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${(result.impliedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${(result.impliedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
                 html += '</tr>';
             });
 
@@ -3642,10 +3663,10 @@
         }
 
         function generateCurrencyGroupTable(pairs) {
-            let html = '<table style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Pair</th><th style="text-align: right;">Avg P&L</th>';
-            html += '<th style="text-align: right;">10Δ Put</th><th style="text-align: right;">25Δ Put</th><th style="text-align: right;">ATM Call</th><th style="text-align: right;">25Δ Call</th><th style="text-align: right;">10Δ Call</th>';
-            html += '<th style="text-align: right;">Real Vol</th><th style="text-align: right;">Impl Vol</th><th style="text-align: right;">Vol Diff</th>';
+            let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
+            html += '<th>Pair</th><th class="numeric-header">Avg P&L</th>';
+            html += '<th class="numeric-header">10Δ Put</th><th class="numeric-header">25Δ Put</th><th class="numeric-header">ATM Call</th><th class="numeric-header">25Δ Call</th><th class="numeric-header">10Δ Call</th>';
+            html += '<th class="numeric-header">Real Vol</th><th class="numeric-header">Impl Vol</th><th class="numeric-header">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result]) => {
@@ -3653,17 +3674,17 @@
 
                 html += '<tr>';
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
-                    html += `<td style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
+                    html += `<td class="data-table-numbers" style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
                 });
 
-                html += `<td>${(result.realizedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${(result.impliedVol * 100).toFixed(2)}%</td>`;
-                html += `<td>${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${(result.impliedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
                 html += '</tr>';
             });
 
