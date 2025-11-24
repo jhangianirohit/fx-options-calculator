@@ -3842,8 +3842,99 @@
                 </tr>`;
             });
 
-            html += `
+            // Calculate averages for this currency group
+            let sumImplVol = 0, sumRealVol = 0, sumVolDiff = 0;
+            let sumPut10 = 0, sumPut25 = 0, sumATM = 0, sumCall25 = 0, sumCall10 = 0, sumAvgPnL = 0;
+            let validCount = 0;
+
+            pairs.forEach(pair => {
+                const data = pnlResults[pair];
+                if (!data || data.error) return;
+                validCount++;
+                sumImplVol += data.impliedVol;
+                sumRealVol += data.realizedVol;
+                sumVolDiff += data.volDiff;
+                sumPut10 += data.strikes['10Δ Put']?.finalPnL || 0;
+                sumPut25 += data.strikes['25Δ Put']?.finalPnL || 0;
+                sumATM += data.strikes['ATM Call']?.finalPnL || 0;
+                sumCall25 += data.strikes['25Δ Call']?.finalPnL || 0;
+                sumCall10 += data.strikes['10Δ Call']?.finalPnL || 0;
+                sumAvgPnL += data.avgPnL;
+            });
+
+            if (validCount > 0) {
+                const avgImplVol = sumImplVol / validCount;
+                const avgRealVol = sumRealVol / validCount;
+                const avgVolDiff = sumVolDiff / validCount;
+                const avgPut10 = sumPut10 / validCount;
+                const avgPut25 = sumPut25 / validCount;
+                const avgATM = sumATM / validCount;
+                const avgCall25 = sumCall25 / validCount;
+                const avgCall10 = sumCall10 / validCount;
+                const avgAvgPnL = sumAvgPnL / validCount;
+
+                // Calculate background colors for averages
+                const avgImplVolBgColor = getCellColor(avgImplVol, scales.impliedVol);
+                const avgRealVolBgColor = getCellColor(avgRealVol, scales.realizedVol);
+                const avgVolDiffBgColor = getCellColor(avgVolDiff, scales.volDiff);
+                const avgPut10BgColor = getCellColor(avgPut10, scales.allStrikesPnL);
+                const avgPut25BgColor = getCellColor(avgPut25, scales.allStrikesPnL);
+                const avgATMBgColor = getCellColor(avgATM, scales.allStrikesPnL);
+                const avgCall25BgColor = getCellColor(avgCall25, scales.allStrikesPnL);
+                const avgCall10BgColor = getCellColor(avgCall10, scales.allStrikesPnL);
+                const avgAvgPnLBgColor = getCellColor(avgAvgPnL, scales.avgPnL);
+
+                // Calculate text colors
+                const avgImplVolTextColor = getTextColorForBackground(avgImplVolBgColor);
+                const avgRealVolTextColor = getTextColorForBackground(avgRealVolBgColor);
+                const avgVolDiffTextColor = getTextColorForBackground(avgVolDiffBgColor);
+                const avgPut10TextColor = getTextColorForBackground(avgPut10BgColor);
+                const avgPut25TextColor = getTextColorForBackground(avgPut25BgColor);
+                const avgATMTextColor = getTextColorForBackground(avgATMBgColor);
+                const avgCall25TextColor = getTextColorForBackground(avgCall25BgColor);
+                const avgCall10TextColor = getTextColorForBackground(avgCall10BgColor);
+                const avgAvgPnLTextColor = getTextColorForBackground(avgAvgPnLBgColor);
+
+                html += `
             </tbody>
+            <tfoot>
+                <tr style="border-top: 3px solid #1e40af; background: #f9fafb; font-weight: 700;">
+                    <td style="padding: 12px; font-weight: 700;">AVERAGE</td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgImplVolBgColor}; color: ${avgImplVolTextColor}; font-weight: 500;">
+                        ${formatVolDecimal(avgImplVol)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgRealVolBgColor}; color: ${avgRealVolTextColor}; font-weight: 500;">
+                        ${formatVolDecimal(avgRealVol)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgVolDiffBgColor}; color: ${avgVolDiffTextColor}; font-weight: 500;">
+                        ${avgVolDiff >= 0 ? '+' : ''}${formatVolDecimal(avgVolDiff)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgPut10BgColor}; color: ${avgPut10TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(avgPut10)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgPut25BgColor}; color: ${avgPut25TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(avgPut25)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgATMBgColor}; color: ${avgATMTextColor}; font-weight: 500;">
+                        ${formatPnLRounded(avgATM)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgCall25BgColor}; color: ${avgCall25TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(avgCall25)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgCall10BgColor}; color: ${avgCall10TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(avgCall10)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgAvgPnLBgColor}; color: ${avgAvgPnLTextColor}; font-weight: 600;">
+                        ${formatPnLRounded(avgAvgPnL)}
+                    </td>
+                </tr>
+            </tfoot>`;
+            } else {
+                html += `
+            </tbody>`;
+            }
+
+            html += `
         </table>
     </div>
 </details>`;
@@ -3903,8 +3994,47 @@
                 </tr>`;
             });
 
+            // Calculate averages for this correlation group
+            const correlations = groupData.correlations;
+            let sumImplCorr = 0, sumRealCorr = 0, sumCorrDiff = 0;
+            
+            correlations.forEach(corr => {
+                sumImplCorr += corr.impliedCorr;
+                sumRealCorr += corr.realizedCorr;
+                sumCorrDiff += corr.difference;
+            });
+
+            const count = correlations.length;
+            const avgImplCorr = sumImplCorr / count;
+            const avgRealCorr = sumRealCorr / count;
+            const avgCorrDiff = sumCorrDiff / count;
+
+            // Calculate background colors
+            const avgImplCorrBgColor = getCellColor(avgImplCorr, scales.impliedCorr);
+            const avgRealCorrBgColor = getCellColor(avgRealCorr, scales.realizedCorr);
+            const avgCorrDiffBgColor = getCellColor(avgCorrDiff, scales.corrDiff);
+
+            // Calculate text colors
+            const avgImplCorrTextColor = getTextColorForBackground(avgImplCorrBgColor);
+            const avgRealCorrTextColor = getTextColorForBackground(avgRealCorrBgColor);
+            const avgCorrDiffTextColor = getTextColorForBackground(avgCorrDiffBgColor);
+
             html += `
             </tbody>
+            <tfoot>
+                <tr style="border-top: 3px solid #1e40af; background: #f9fafb; font-weight: 700;">
+                    <td colspan="2" style="padding: 12px; font-weight: 700;">AVERAGE (${count} correlations)</td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgImplCorrBgColor}; color: ${avgImplCorrTextColor}; font-weight: 500;">
+                        ${formatCorrInteger(avgImplCorr)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgRealCorrBgColor}; color: ${avgRealCorrTextColor}; font-weight: 500;">
+                        ${formatCorrInteger(avgRealCorr)}
+                    </td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgCorrDiffBgColor}; color: ${avgCorrDiffTextColor}; font-weight: 500;">
+                        ${avgCorrDiff >= 0 ? '+' : ''}${formatCorrInteger(avgCorrDiff)}
+                    </td>
+                </tr>
+            </tfoot>
         </table>
     </div>
 </details>`;
