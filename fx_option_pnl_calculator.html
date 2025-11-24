@@ -1571,6 +1571,48 @@
             return [...currencies].sort((a, b) => getCurrencyRank(a) - getCurrencyRank(b));
         }
 
+        function constructMainPair(mainCurrency, secondaryCurrency) {
+            // Construct the canonical pair name following standard convention
+            // and the specified ordering
+            
+            const rank1 = getCurrencyRank(mainCurrency);
+            const rank2 = getCurrencyRank(secondaryCurrency);
+            
+            // The currency with lower rank (appears earlier in CURRENCY_ORDER) comes first
+            if (rank1 < rank2) {
+                return `${mainCurrency}${secondaryCurrency}`;
+            } else {
+                return `${secondaryCurrency}${mainCurrency}`;
+            }
+        }
+
+        function normalizeCorrelationForDisplay(corr, mainPair) {
+            // Ensure pair1 is always the mainPair
+            // If it's not, swap pair1 and pair2
+            
+            if (corr.pair1 === mainPair) {
+                return {
+                    pair1: corr.pair1,
+                    pair2: corr.pair2,
+                    impliedCorr: corr.impliedCorr,
+                    realizedCorr: corr.realizedCorr,
+                    difference: corr.difference
+                };
+            } else if (corr.pair2 === mainPair) {
+                // Swap
+                return {
+                    pair1: corr.pair2,
+                    pair2: corr.pair1,
+                    impliedCorr: corr.impliedCorr,
+                    realizedCorr: corr.realizedCorr,
+                    difference: corr.difference
+                };
+            } else {
+                // Neither is the main pair, return as-is
+                return corr;
+            }
+        }
+
         // ============ TAB SWITCHING ============
 
         function switchTab(tabName) {
@@ -4194,6 +4236,7 @@
                 // Nested groups
                 Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
                     const corrArray = Array.isArray(correlations) ? correlations : [];
+                    const mainPair = constructMainPair(mainCurrency, secondaryCurrency);
                     html += `
             <div style="margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 6px;">
                 <h4 style="font-size: 13px; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
@@ -4213,9 +4256,10 @@
                         <tbody>`;
 
                     corrArray.forEach(corr => {
-                        const implCorrBg = getCellColor(corr.impliedCorr, scales.impliedCorr);
-                        const realCorrBg = getCellColor(corr.realizedCorr, scales.realizedCorr);
-                        const diffBg = getCellColor(corr.difference, scales.corrDiff);
+                        const normalized = normalizeCorrelationForDisplay(corr, mainPair);
+                        const implCorrBg = getCellColor(normalized.impliedCorr, scales.impliedCorr);
+                        const realCorrBg = getCellColor(normalized.realizedCorr, scales.realizedCorr);
+                        const diffBg = getCellColor(normalized.difference, scales.corrDiff);
                         
                         const implCorrText = getTextColorForBackground(implCorrBg);
                         const realCorrText = getTextColorForBackground(realCorrBg);
@@ -4223,16 +4267,16 @@
 
                         html += `
                             <tr style="border-bottom: 1px solid #f3f4f6;">
-                                <td style="padding: 10px;">${corr.pair1}</td>
-                                <td style="padding: 10px;">${corr.pair2}</td>
+                                <td style="padding: 10px;">${normalized.pair1}</td>
+                                <td style="padding: 10px;">${normalized.pair2}</td>
                                 <td style="padding: 10px; text-align: right; background-color: ${implCorrBg}; color: ${implCorrText}; font-weight: 500;">
-                                    ${formatCorrInteger(corr.impliedCorr)}
+                                    ${formatCorrInteger(normalized.impliedCorr)}
                                 </td>
                                 <td style="padding: 10px; text-align: right; background-color: ${realCorrBg}; color: ${realCorrText}; font-weight: 500;">
-                                    ${formatCorrInteger(corr.realizedCorr)}
+                                    ${formatCorrInteger(normalized.realizedCorr)}
                                 </td>
                                 <td style="padding: 10px; text-align: right; background-color: ${diffBg}; color: ${diffText}; font-weight: 500;">
-                                    ${corr.difference >= 0 ? '+' : ''}${formatCorrInteger(corr.difference)}
+                                    ${normalized.difference >= 0 ? '+' : ''}${formatCorrInteger(normalized.difference)}
                                 </td>
                             </tr>`;
                     });
@@ -4254,7 +4298,7 @@
                         </tbody>
                         <tfoot>
                             <tr style="border-top: 2px solid #1e40af; background: #f0f9ff; font-weight: 600;">
-                                <td colspan="2" style="padding: 10px;">SUB-GROUP AVERAGE</td>
+                                <td colspan="2" style="padding: 10px;">SUB-GROUP AVERAGE (${corrArray.length})</td>
                                 <td style="padding: 10px; text-align: right; background-color: ${subAvgImplBg}; color: ${subAvgImplText};">
                                     ${formatCorrInteger(subAvgImpl)}
                                 </td>
@@ -4776,15 +4820,20 @@ Full report in email.
                 // Nested groups
                 Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
                     const corrArray = Array.isArray(correlations) ? correlations : [];
+                    const mainPair = constructMainPair(mainCurrency, secondaryCurrency);
+                    
+                    // Normalize correlations to ensure mainPair is always Pair 1
+                    const normalizedCorrs = corrArray.map(corr => normalizeCorrelationForDisplay(corr, mainPair));
+                    
                     html += `
                 <div class="nested-correlation-group" style="margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 6px;">
                     <h4 style="font-size: 14px; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
                         ${mainCurrency}-${secondaryCurrency} (${corrArray.length} correlations)
                     </h4>`;
                     
-                    // Use existing generateCurrencyCorrelationTable but with filtered correlations
+                    // Use existing generateCurrencyCorrelationTable but with normalized correlations
                     const tempGroupData = { 
-                        correlations: corrArray,
+                        correlations: normalizedCorrs,
                         avgImpliedCorr: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.impliedCorr, 0) / corrArray.length : 0,
                         avgRealizedCorr: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.realizedCorr, 0) / corrArray.length : 0,
                         avgDifference: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.difference, 0) / corrArray.length : 0
@@ -4799,8 +4848,8 @@ Full report in email.
                 const overallAvgDiff = uniqueCorrelations.reduce((sum, c) => sum + c.difference, 0) / uniqueCorrelations.length;
 
                 html += `
-                <div class="overall-summary" style="margin-top: 20px; padding: 16px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px;">
-                    <div style="font-weight: 700; margin-bottom: 12px; color: #92400e;">
+                <div class="overall-summary" style="margin-top: 20px; padding: 12px 16px; background: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
+                    <div style="font-weight: 600; font-size: 14px; color: #1e40af; margin-bottom: 12px;">
                         ${mainCurrency} OVERALL AVERAGE (${uniqueCorrelations.length} unique correlations)
                     </div>
                     <div class="summary-bar" style="display: flex; gap: 16px; justify-content: space-around;">
