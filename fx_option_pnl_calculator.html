@@ -4836,7 +4836,8 @@ Full report in email.
                         correlations: normalizedCorrs,
                         avgImpliedCorr: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.impliedCorr, 0) / corrArray.length : 0,
                         avgRealizedCorr: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.realizedCorr, 0) / corrArray.length : 0,
-                        avgDifference: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.difference, 0) / corrArray.length : 0
+                        avgDifference: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.difference, 0) / corrArray.length : 0,
+                        count: corrArray.length
                     };
                     html += generateCurrencyCorrelationTable(`${mainCurrency}-${secondaryCurrency}`, tempGroupData);
                 });
