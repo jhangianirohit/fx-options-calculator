@@ -1473,7 +1473,22 @@
             <!-- Results Section -->
             <div id="batchResults" style="display: none;">
                 <h2>Results</h2>
-
+                
+                <!-- Export Buttons -->
+                <div id="exportButtons" style="display: none; margin-top: 24px; padding-top: 24px; border-top: 2px solid #e5e7eb;">
+                    <h3 style="margin-bottom: 16px; color: #1f2937;">Export Results</h3>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="copyEmailReport()" style="min-width: 200px;">
+                            📋 Copy Email Report
+                        </button>
+                        <button class="btn btn-secondary" onclick="copyBloombergChat()" style="min-width: 200px;">
+                            💬 Copy Bloomberg Chat
+                        </button>
+                    </div>
+                    <div id="exportStatus" style="margin-top: 12px; font-size: 13px; color: #059669;"></div>
+                </div>
+                
+                <div id="batchResultsContent">
                 <!-- Top 5 / Bottom 5 Rankings -->
                 <div id="rankingsSection">
                     <h3 style="text-align: center; background-color: #007bff; color: white; padding: 15px; border-radius: 8px; margin-top: 30px;">TOP 5 PERFORMERS</h3>
@@ -1494,6 +1509,8 @@
                     <h2 style="margin-top: 40px;">Pair Details (Click to Expand)</h2>
                     <div id="expandableDetailsContent"></div>
                 </div>
+                </div>
+                <!-- End batchResultsContent -->
             </div>
         </div>
         <!-- End Batch Analysis Tab -->
@@ -3180,7 +3197,1032 @@
             };
         }
 
+        // ============ EMAIL EXPORT FUNCTIONS ============
+
+        function calculateGlobalScales(pnlResults, correlationResults) {
+            const scales = {
+                impliedVol: { min: Infinity, max: -Infinity },
+                realizedVol: { min: Infinity, max: -Infinity },
+                volDiff: { min: Infinity, max: -Infinity },
+                allStrikesPnL: { min: Infinity, max: -Infinity },
+                avgPnL: { min: Infinity, max: -Infinity },
+                impliedCorr: { min: Infinity, max: -Infinity },
+                realizedCorr: { min: Infinity, max: -Infinity },
+                corrDiff: { min: Infinity, max: -Infinity }
+            };
+
+            // Process P&L results
+            Object.values(pnlResults).forEach(result => {
+                if (result.error) return;
+
+                // Vol scales
+                scales.impliedVol.min = Math.min(scales.impliedVol.min, result.impliedVol);
+                scales.impliedVol.max = Math.max(scales.impliedVol.max, result.impliedVol);
+
+                scales.realizedVol.min = Math.min(scales.realizedVol.min, result.realizedVol);
+                scales.realizedVol.max = Math.max(scales.realizedVol.max, result.realizedVol);
+
+                scales.volDiff.min = Math.min(scales.volDiff.min, result.volDiff);
+                scales.volDiff.max = Math.max(scales.volDiff.max, result.volDiff);
+
+                // P&L scales - ALL strikes use same scale
+                const allPnLs = [
+                    result.strikes['10Δ Put']?.finalPnL || 0,
+                    result.strikes['25Δ Put']?.finalPnL || 0,
+                    result.strikes['ATM Call']?.finalPnL || 0,
+                    result.strikes['25Δ Call']?.finalPnL || 0,
+                    result.strikes['10Δ Call']?.finalPnL || 0
+                ];
+
+                allPnLs.forEach(pnl => {
+                    scales.allStrikesPnL.min = Math.min(scales.allStrikesPnL.min, pnl);
+                    scales.allStrikesPnL.max = Math.max(scales.allStrikesPnL.max, pnl);
+                });
+
+                // Average P&L has its own scale
+                scales.avgPnL.min = Math.min(scales.avgPnL.min, result.avgPnL);
+                scales.avgPnL.max = Math.max(scales.avgPnL.max, result.avgPnL);
+            });
+
+            // Process correlation results
+            Object.values(correlationResults || {}).forEach(group => {
+                if (group.correlations) {
+                    group.correlations.forEach(corr => {
+                        scales.impliedCorr.min = Math.min(scales.impliedCorr.min, corr.impliedCorr);
+                        scales.impliedCorr.max = Math.max(scales.impliedCorr.max, corr.impliedCorr);
+
+                        scales.realizedCorr.min = Math.min(scales.realizedCorr.min, corr.realizedCorr);
+                        scales.realizedCorr.max = Math.max(scales.realizedCorr.max, corr.realizedCorr);
+
+                        scales.corrDiff.min = Math.min(scales.corrDiff.min, corr.difference);
+                        scales.corrDiff.max = Math.max(scales.corrDiff.max, corr.difference);
+                    });
+                }
+            });
+
+            return scales;
+        }
+
+        function getCellColor(value, scale) {
+            // Handle edge cases
+            if (scale.min === scale.max) return '#000000'; // All same, use black
+
+            // Excel-style 3-color scale: Red -> White -> Green
+            const min = scale.min;
+            const max = scale.max;
+            const mid = 0; // Midpoint at zero
+
+            let color;
+
+            if (value <= mid) {
+                // Between min and mid: Red to White
+                // Normalize to [0, 1] where 0 = min, 1 = mid
+                if (mid === min) {
+                    color = '#dc2626'; // Red if min equals mid
+                } else {
+                    const normalized = (value - min) / (mid - min);
+                    color = interpolateColor('#dc2626', '#ffffff', normalized); // Red to White
+                }
+            } else {
+                // Between mid and max: White to Green
+                // Normalize to [0, 1] where 0 = mid, 1 = max
+                if (max === mid) {
+                    color = '#ffffff'; // White if max equals mid
+                } else {
+                    const normalized = (value - mid) / (max - mid);
+                    color = interpolateColor('#ffffff', '#059669', normalized); // White to Green
+                }
+            }
+
+            return color;
+        }
+
+        function getTextColorForBackground(backgroundColor) {
+            // Convert hex to RGB
+            const rgb = hexToRgb(backgroundColor);
+            
+            // Calculate perceived brightness (0-255)
+            // Formula: https://www.w3.org/TR/AERT/#color-contrast
+            const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+            
+            // If background is bright, use dark text; if dark background, use light text
+            return brightness > 155 ? '#000000' : '#ffffff';
+        }
+
+        function interpolateColor(color1Hex, color2Hex, factor) {
+            // Clamp factor to [0, 1]
+            factor = Math.max(0, Math.min(1, factor));
+
+            const c1 = hexToRgb(color1Hex);
+            const c2 = hexToRgb(color2Hex);
+
+            const r = Math.round(c1.r + (c2.r - c1.r) * factor);
+            const g = Math.round(c1.g + (c2.g - c1.g) * factor);
+            const b = Math.round(c1.b + (c2.b - c1.b) * factor);
+
+            return rgbToHex(r, g, b);
+        }
+
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            return {
+                r: parseInt(hex.substring(0, 2), 16),
+                g: parseInt(hex.substring(2, 4), 16),
+                b: parseInt(hex.substring(4, 6), 16)
+            };
+        }
+
+        function rgbToHex(r, g, b) {
+            return '#' + [r, g, b]
+                .map(x => x.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        function formatVolDecimal(vol) {
+            return (vol * 100).toFixed(2) + '%';
+        }
+
+        function formatCorrInteger(corr) {
+            return Math.round(corr * 100) + '%';
+        }
+
+        function formatPnLRounded(pnl) {
+            const roundedK = Math.round(pnl / 1000);
+            const sign = roundedK >= 0 ? '+' : '';
+            return sign + '$' + roundedK + 'K';
+        }
+
+        function formatDateTime(timestamp, timezone = 'EST') {
+            const date = new Date(timestamp);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+
+            return `${year}-${month}-${day} ${hours}:${minutes} ${timezone}`;
+        }
+
+        function calculateDurationHours(timestamps) {
+            // timestamps is the array from uploadedTimestamps
+            // First and last elements are the range
+            if (!timestamps || timestamps.length === 0) {
+                return 0;
+            }
+            
+            const startTime = new Date(timestamps[0]);
+            const endTime = new Date(timestamps[timestamps.length - 1]);
+            
+            const durationMs = endTime - startTime;
+            const durationHours = Math.round(durationMs / (1000 * 60 * 60));
+            
+            return durationHours;
+        }
+
+        function generateEmailHeader(config, analyzedPairs, timestamps, currencies) {
+            if (!timestamps || timestamps.length === 0) {
+                return '<div>Error: No timestamp data available</div>';
+            }
+
+            const startTime = new Date(timestamps[0]);
+            const endTime = new Date(timestamps[timestamps.length - 1]);
+            const durationHours = calculateDurationHours(timestamps);
+
+            const usdCount = analyzedPairs.filter(p => p.includes('USD')).length;
+            const crossCount = analyzedPairs.filter(p => !p.includes('USD')).length;
+
+            const rebalFreq = config.rebalancingFrequency || 'Daily';
+            // Get option expiry correctly
+            let expiryHours;
+            if (config.optionExpiryHours !== undefined) {
+                expiryHours = config.optionExpiryHours;
+            } else if (config.expiryHours !== undefined) {
+                expiryHours = config.expiryHours;
+            } else if (config.optionExpiry !== undefined) {
+                // Try to extract hours from formatted string
+                const match = config.optionExpiry.match(/(\d+)\s*hours?/i);
+                if (match) {
+                    expiryHours = parseInt(match[1]);
+                } else {
+                    // Fallback: calculate from analysis window
+                    expiryHours = Math.round((endTime - startTime) / (1000 * 60 * 60));
+                }
+            } else {
+                // Fallback: calculate from analysis window
+                expiryHours = Math.round((endTime - startTime) / (1000 * 60 * 60));
+            }
+            const expiryText = `${expiryHours} hours`;
+
+            return `
+<div style="background: #f9fafb; padding: 24px; margin-bottom: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
+    <h2 style="margin: 0 0 20px 0; font-size: 18px; color: #1f2937; border-bottom: 2px solid #1e40af; padding-bottom: 12px;">
+        FX Options P&L, Vol, Correlation Analysis - ${formatDateTime(startTime)} to ${formatDateTime(endTime)}
+    </h2>
+
+    <table style="width: 100%; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 6px 12px; width: 33%;"><strong>Analysis Period:</strong></td>
+            <td style="padding: 6px 12px; width: 33%;">${formatDateTime(startTime)} to ${formatDateTime(endTime)}</td>
+            <td style="padding: 6px 12px; width: 33%;"><strong>Rebalancing:</strong></td>
+            <td style="padding: 6px 12px;">Every ${rebalFreq}</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 12px;"><strong>Duration:</strong></td>
+            <td style="padding: 6px 12px;">${durationHours} hours</td>
+            <td style="padding: 6px 12px;"><strong>Option Expiry:</strong></td>
+            <td style="padding: 6px 12px;">${expiryText}</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 12px;"><strong>Pairs Analyzed:</strong></td>
+            <td style="padding: 6px 12px;">${analyzedPairs.length} pairs (${usdCount} USD, ${crossCount} cross)</td>
+            <td style="padding: 6px 12px;"><strong>Base Notional:</strong></td>
+            <td style="padding: 6px 12px;">$100M USD equivalent per strike</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 12px;"><strong>Strikes Analyzed:</strong></td>
+            <td colspan="3" style="padding: 6px 12px;">10Δ Put, 25Δ Put, ATM Call, 25Δ Call, 10Δ Call</td>
+        </tr>
+    </table>
+</div>`;
+        }
+
+        function generateTop5VolTable(pnlResults, scales) {
+            const sorted = Object.entries(pnlResults)
+                .filter(([_, data]) => !data.error)
+                .map(([pair, data]) => ({
+                    pair,
+                    impliedVol: data.impliedVol,
+                    realizedVol: data.realizedVol,
+                    volDifference: data.volDiff,
+                    avgPnL: data.avgPnL
+                }))
+                .sort((a, b) => b.volDifference - a.volDifference)
+                .slice(0, 5);
+
+            let html = `
+<div style="margin-bottom: 32px;">
+    <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
+        TOP 5 VOL PERFORMERS (Realized > Implied)
+    </h3>
+    <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
+        <thead>
+            <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
+                <th style="padding: 12px; text-align: left;">Rank</th>
+                <th style="padding: 12px; text-align: left;">Pair</th>
+                <th style="padding: 12px; text-align: right;">Impl Vol</th>
+                <th style="padding: 12px; text-align: right;">Real Vol</th>
+                <th style="padding: 12px; text-align: right;">Difference</th>
+                <th style="padding: 12px; text-align: right;">Avg P&L</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+            sorted.forEach((item, idx) => {
+                // Calculate background colors
+                const implVolBgColor = getCellColor(item.impliedVol, scales.impliedVol);
+                const realVolBgColor = getCellColor(item.realizedVol, scales.realizedVol);
+                const volDiffBgColor = getCellColor(item.volDifference, scales.volDiff);
+                const avgPnLBgColor = getCellColor(item.avgPnL, scales.avgPnL);
+                
+                // Calculate text colors
+                const implVolTextColor = getTextColorForBackground(implVolBgColor);
+                const realVolTextColor = getTextColorForBackground(realVolBgColor);
+                const volDiffTextColor = getTextColorForBackground(volDiffBgColor);
+                const avgPnLTextColor = getTextColorForBackground(avgPnLBgColor);
+
+                html += `
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">${idx + 1}</td>
+                <td style="padding: 12px; font-weight: 600;">${item.pair}</td>
+                <td style="padding: 12px; text-align: right; background-color: ${implVolBgColor}; color: ${implVolTextColor}; font-weight: 500;">
+                    ${formatVolDecimal(item.impliedVol)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${realVolBgColor}; color: ${realVolTextColor}; font-weight: 500;">
+                    ${formatVolDecimal(item.realizedVol)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${volDiffBgColor}; color: ${volDiffTextColor}; font-weight: 600;">
+                    ${item.volDifference >= 0 ? '+' : ''}${formatVolDecimal(item.volDifference)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${avgPnLBgColor}; color: ${avgPnLTextColor}; font-weight: 500;">
+                    ${formatPnLRounded(item.avgPnL)}
+                </td>
+            </tr>`;
+            });
+
+            html += `
+        </tbody>
+    </table>
+</div>`;
+
+            return html;
+        }
+
+        function generateBottom5VolTable(pnlResults, scales) {
+            const sorted = Object.entries(pnlResults)
+                .filter(([_, data]) => !data.error)
+                .map(([pair, data]) => ({
+                    pair,
+                    impliedVol: data.impliedVol,
+                    realizedVol: data.realizedVol,
+                    volDifference: data.volDiff,
+                    avgPnL: data.avgPnL
+                }))
+                .sort((a, b) => a.volDifference - b.volDifference)
+                .slice(0, 5);
+
+            const totalPairs = Object.keys(pnlResults).filter(p => !pnlResults[p].error).length;
+
+            let html = `
+<div style="margin-bottom: 32px;">
+    <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
+        BOTTOM 5 VOL PERFORMERS (Realized < Implied)
+    </h3>
+    <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
+        <thead>
+            <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
+                <th style="padding: 12px; text-align: left;">Rank</th>
+                <th style="padding: 12px; text-align: left;">Pair</th>
+                <th style="padding: 12px; text-align: right;">Impl Vol</th>
+                <th style="padding: 12px; text-align: right;">Real Vol</th>
+                <th style="padding: 12px; text-align: right;">Difference</th>
+                <th style="padding: 12px; text-align: right;">Avg P&L</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+            sorted.forEach((item, idx) => {
+                const rank = totalPairs - 4 + idx;
+                // Calculate background colors
+                const implVolBgColor = getCellColor(item.impliedVol, scales.impliedVol);
+                const realVolBgColor = getCellColor(item.realizedVol, scales.realizedVol);
+                const volDiffBgColor = getCellColor(item.volDifference, scales.volDiff);
+                const avgPnLBgColor = getCellColor(item.avgPnL, scales.avgPnL);
+                
+                // Calculate text colors
+                const implVolTextColor = getTextColorForBackground(implVolBgColor);
+                const realVolTextColor = getTextColorForBackground(realVolBgColor);
+                const volDiffTextColor = getTextColorForBackground(volDiffBgColor);
+                const avgPnLTextColor = getTextColorForBackground(avgPnLBgColor);
+
+                html += `
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">${rank}</td>
+                <td style="padding: 12px; font-weight: 600;">${item.pair}</td>
+                <td style="padding: 12px; text-align: right; background-color: ${implVolBgColor}; color: ${implVolTextColor}; font-weight: 500;">
+                    ${formatVolDecimal(item.impliedVol)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${realVolBgColor}; color: ${realVolTextColor}; font-weight: 500;">
+                    ${formatVolDecimal(item.realizedVol)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${volDiffBgColor}; color: ${volDiffTextColor}; font-weight: 600;">
+                    ${item.volDifference >= 0 ? '+' : ''}${formatVolDecimal(item.volDifference)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${avgPnLBgColor}; color: ${avgPnLTextColor}; font-weight: 500;">
+                    ${formatPnLRounded(item.avgPnL)}
+                </td>
+            </tr>`;
+            });
+
+            html += `
+        </tbody>
+    </table>
+</div>`;
+
+            return html;
+        }
+
+        function generateTop5CorrTable(correlationResults, scales) {
+            const allCorrelations = [];
+            Object.entries(correlationResults || {}).forEach(([currency, data]) => {
+                if (data.correlations) {
+                    data.correlations.forEach(corr => {
+                        allCorrelations.push({
+                            currency: currency,
+                            ...corr
+                        });
+                    });
+                }
+            });
+
+            const sorted = allCorrelations
+                .sort((a, b) => b.difference - a.difference)
+                .slice(0, 5);
+
+            let html = `
+<div style="margin-bottom: 32px;">
+    <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
+        TOP 5 CORRELATION PERFORMERS
+    </h3>
+    <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
+        <thead>
+            <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
+                <th style="padding: 12px; text-align: left;">Rank</th>
+                <th style="padding: 12px; text-align: left;">Currency</th>
+                <th style="padding: 12px; text-align: left;">Pair 1</th>
+                <th style="padding: 12px; text-align: left;">Pair 2</th>
+                <th style="padding: 12px; text-align: right;">Impl Corr</th>
+                <th style="padding: 12px; text-align: right;">Real Corr</th>
+                <th style="padding: 12px; text-align: right;">Difference</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+            sorted.forEach((item, idx) => {
+                // Calculate background colors
+                const implCorrBgColor = getCellColor(item.impliedCorr, scales.impliedCorr);
+                const realCorrBgColor = getCellColor(item.realizedCorr, scales.realizedCorr);
+                const corrDiffBgColor = getCellColor(item.difference, scales.corrDiff);
+                
+                // Calculate text colors
+                const implCorrTextColor = getTextColorForBackground(implCorrBgColor);
+                const realCorrTextColor = getTextColorForBackground(realCorrBgColor);
+                const corrDiffTextColor = getTextColorForBackground(corrDiffBgColor);
+
+                html += `
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">${idx + 1}</td>
+                <td style="padding: 12px; font-weight: 600;">${item.currency}</td>
+                <td style="padding: 12px;">${item.pair1}</td>
+                <td style="padding: 12px;">${item.pair2}</td>
+                <td style="padding: 12px; text-align: right; background-color: ${implCorrBgColor}; color: ${implCorrTextColor}; font-weight: 500;">
+                    ${formatCorrInteger(item.impliedCorr)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${realCorrBgColor}; color: ${realCorrTextColor}; font-weight: 500;">
+                    ${formatCorrInteger(item.realizedCorr)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${corrDiffBgColor}; color: ${corrDiffTextColor}; font-weight: 600;">
+                    ${item.difference >= 0 ? '+' : ''}${formatCorrInteger(item.difference)}
+                </td>
+            </tr>`;
+            });
+
+            html += `
+        </tbody>
+    </table>
+</div>`;
+
+            return html;
+        }
+
+        function generateBottom5CorrTable(correlationResults, scales) {
+            const allCorrelations = [];
+            Object.entries(correlationResults || {}).forEach(([currency, data]) => {
+                if (data.correlations) {
+                    data.correlations.forEach(corr => {
+                        allCorrelations.push({
+                            currency: currency,
+                            ...corr
+                        });
+                    });
+                }
+            });
+
+            const sorted = allCorrelations
+                .sort((a, b) => a.difference - b.difference)
+                .slice(0, 5);
+
+            const totalCorrs = allCorrelations.length;
+
+            let html = `
+<div style="margin-bottom: 32px;">
+    <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
+        BOTTOM 5 CORRELATION PERFORMERS
+    </h3>
+    <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
+        <thead>
+            <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
+                <th style="padding: 12px; text-align: left;">Rank</th>
+                <th style="padding: 12px; text-align: left;">Currency</th>
+                <th style="padding: 12px; text-align: left;">Pair 1</th>
+                <th style="padding: 12px; text-align: left;">Pair 2</th>
+                <th style="padding: 12px; text-align: right;">Impl Corr</th>
+                <th style="padding: 12px; text-align: right;">Real Corr</th>
+                <th style="padding: 12px; text-align: right;">Difference</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+            sorted.forEach((item, idx) => {
+                const rank = totalCorrs - idx;
+                // Calculate background colors
+                const implCorrBgColor = getCellColor(item.impliedCorr, scales.impliedCorr);
+                const realCorrBgColor = getCellColor(item.realizedCorr, scales.realizedCorr);
+                const corrDiffBgColor = getCellColor(item.difference, scales.corrDiff);
+                
+                // Calculate text colors
+                const implCorrTextColor = getTextColorForBackground(implCorrBgColor);
+                const realCorrTextColor = getTextColorForBackground(realCorrBgColor);
+                const corrDiffTextColor = getTextColorForBackground(corrDiffBgColor);
+
+                html += `
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px;">${rank}</td>
+                <td style="padding: 12px; font-weight: 600;">${item.currency}</td>
+                <td style="padding: 12px;">${item.pair1}</td>
+                <td style="padding: 12px;">${item.pair2}</td>
+                <td style="padding: 12px; text-align: right; background-color: ${implCorrBgColor}; color: ${implCorrTextColor}; font-weight: 500;">
+                    ${formatCorrInteger(item.impliedCorr)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${realCorrBgColor}; color: ${realCorrTextColor}; font-weight: 500;">
+                    ${formatCorrInteger(item.realizedCorr)}
+                </td>
+                <td style="padding: 12px; text-align: right; background-color: ${corrDiffBgColor}; color: ${corrDiffTextColor}; font-weight: 600;">
+                    ${item.difference >= 0 ? '+' : ''}${formatCorrInteger(item.difference)}
+                </td>
+            </tr>`;
+            });
+
+            html += `
+        </tbody>
+    </table>
+</div>`;
+
+            return html;
+        }
+
+        function buildCurrencyGroups(pnlResults, currencies) {
+            const groups = {};
+            currencies.forEach(currency => {
+                groups[currency] = [];
+            });
+
+            Object.keys(pnlResults).forEach(pair => {
+                if (pnlResults[pair].error) return;
+                const ccy1 = pair.substring(0, 3);
+                const ccy2 = pair.substring(3, 6);
+                if (groups[ccy1]) groups[ccy1].push(pair);
+                if (groups[ccy2]) groups[ccy2].push(pair);
+            });
+
+            return groups;
+        }
+
+        function generateCurrencyPnLSection(currency, pairs, pnlResults, scales) {
+            const currencyName = getCurrencyName(currency);
+
+            let html = `
+<details style="margin: 16px 0; border-left: 3px solid #1e40af; padding-left: 16px;">
+    <summary style="cursor: pointer; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+        ▶ ${currencyName} (${pairs.length} pairs)
+    </summary>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; min-width: 1000px;">
+            <thead>
+                <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
+                    <th style="padding: 10px; text-align: left;">Pair</th>
+                    <th style="padding: 10px; text-align: right;">Impl Vol</th>
+                    <th style="padding: 10px; text-align: right;">Real Vol</th>
+                    <th style="padding: 10px; text-align: right;">Vol Diff</th>
+                    <th style="padding: 10px; text-align: right;">10Δ Put</th>
+                    <th style="padding: 10px; text-align: right;">25Δ Put</th>
+                    <th style="padding: 10px; text-align: right;">ATM</th>
+                    <th style="padding: 10px; text-align: right;">25Δ Call</th>
+                    <th style="padding: 10px; text-align: right;">10Δ Call</th>
+                    <th style="padding: 10px; text-align: right;">Avg P&L</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+            pairs.forEach(pair => {
+                const data = pnlResults[pair];
+                if (!data || data.error) return;
+
+                // Calculate background colors
+                const implVolBgColor = getCellColor(data.impliedVol, scales.impliedVol);
+                const realVolBgColor = getCellColor(data.realizedVol, scales.realizedVol);
+                const volDiffBgColor = getCellColor(data.volDiff, scales.volDiff);
+                const put10BgColor = getCellColor(data.strikes['10Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
+                const put25BgColor = getCellColor(data.strikes['25Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
+                const atmBgColor = getCellColor(data.strikes['ATM Call']?.finalPnL || 0, scales.allStrikesPnL);
+                const call25BgColor = getCellColor(data.strikes['25Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
+                const call10BgColor = getCellColor(data.strikes['10Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
+                const avgPnLBgColor = getCellColor(data.avgPnL, scales.avgPnL);
+                
+                // Calculate text colors
+                const implVolTextColor = getTextColorForBackground(implVolBgColor);
+                const realVolTextColor = getTextColorForBackground(realVolBgColor);
+                const volDiffTextColor = getTextColorForBackground(volDiffBgColor);
+                const put10TextColor = getTextColorForBackground(put10BgColor);
+                const put25TextColor = getTextColorForBackground(put25BgColor);
+                const atmTextColor = getTextColorForBackground(atmBgColor);
+                const call25TextColor = getTextColorForBackground(call25BgColor);
+                const call10TextColor = getTextColorForBackground(call10BgColor);
+                const avgPnLTextColor = getTextColorForBackground(avgPnLBgColor);
+
+                html += `
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px; font-weight: 600;">${pair}</td>
+                    <td style="padding: 10px; text-align: right; background-color: ${implVolBgColor}; color: ${implVolTextColor}; font-weight: 500;">
+                        ${formatVolDecimal(data.impliedVol)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${realVolBgColor}; color: ${realVolTextColor}; font-weight: 500;">
+                        ${formatVolDecimal(data.realizedVol)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${volDiffBgColor}; color: ${volDiffTextColor}; font-weight: 500;">
+                        ${data.volDiff >= 0 ? '+' : ''}${formatVolDecimal(data.volDiff)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${put10BgColor}; color: ${put10TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(data.strikes['10Δ Put']?.finalPnL || 0)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${put25BgColor}; color: ${put25TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(data.strikes['25Δ Put']?.finalPnL || 0)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${atmBgColor}; color: ${atmTextColor}; font-weight: 500;">
+                        ${formatPnLRounded(data.strikes['ATM Call']?.finalPnL || 0)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${call25BgColor}; color: ${call25TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(data.strikes['25Δ Call']?.finalPnL || 0)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${call10BgColor}; color: ${call10TextColor}; font-weight: 500;">
+                        ${formatPnLRounded(data.strikes['10Δ Call']?.finalPnL || 0)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${avgPnLBgColor}; color: ${avgPnLTextColor}; font-weight: 600;">
+                        ${formatPnLRounded(data.avgPnL)}
+                    </td>
+                </tr>`;
+            });
+
+            html += `
+            </tbody>
+        </table>
+    </div>
+</details>`;
+
+            return html;
+        }
+
+        function generateCurrencyCorrSection(currency, groupData, scales) {
+            if (!groupData || !groupData.correlations || groupData.correlations.length === 0) {
+                return '';
+            }
+
+            const currencyName = getCurrencyName(currency);
+
+            let html = `
+<details style="margin: 16px 0; border-left: 3px solid #1e40af; padding-left: 16px;">
+    <summary style="cursor: pointer; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+        ▶ ${currencyName} (${groupData.correlations.length} correlations)
+    </summary>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px;">
+            <thead>
+                <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
+                    <th style="padding: 10px; text-align: left;">Pair 1</th>
+                    <th style="padding: 10px; text-align: left;">Pair 2</th>
+                    <th style="padding: 10px; text-align: right;">Impl Corr</th>
+                    <th style="padding: 10px; text-align: right;">Real Corr</th>
+                    <th style="padding: 10px; text-align: right;">Difference</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+            groupData.correlations.forEach(corr => {
+                // Calculate background colors
+                const implCorrBgColor = getCellColor(corr.impliedCorr, scales.impliedCorr);
+                const realCorrBgColor = getCellColor(corr.realizedCorr, scales.realizedCorr);
+                const corrDiffBgColor = getCellColor(corr.difference, scales.corrDiff);
+                
+                // Calculate text colors
+                const implCorrTextColor = getTextColorForBackground(implCorrBgColor);
+                const realCorrTextColor = getTextColorForBackground(realCorrBgColor);
+                const corrDiffTextColor = getTextColorForBackground(corrDiffBgColor);
+
+                html += `
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px;">${corr.pair1}</td>
+                    <td style="padding: 10px;">${corr.pair2}</td>
+                    <td style="padding: 10px; text-align: right; background-color: ${implCorrBgColor}; color: ${implCorrTextColor}; font-weight: 500;">
+                        ${formatCorrInteger(corr.impliedCorr)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${realCorrBgColor}; color: ${realCorrTextColor}; font-weight: 500;">
+                        ${formatCorrInteger(corr.realizedCorr)}
+                    </td>
+                    <td style="padding: 10px; text-align: right; background-color: ${corrDiffBgColor}; color: ${corrDiffTextColor}; font-weight: 600;">
+                        ${corr.difference >= 0 ? '+' : ''}${formatCorrInteger(corr.difference)}
+                    </td>
+                </tr>`;
+            });
+
+            html += `
+            </tbody>
+        </table>
+    </div>
+</details>`;
+
+            return html;
+        }
+
+        function generateExpandableFullResults(pnlResults, correlationResults, scales, currencies) {
+            let html = `
+<div style="margin-top: 48px;">
+    <details style="margin-bottom: 24px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 15px; color: #1f2937; padding: 8px;">
+            &gt;&gt; FULL P&L RESULTS - Click to expand
+        </summary>
+        <div style="padding: 16px 0;">`;
+
+            const currencyGroups = buildCurrencyGroups(pnlResults, currencies);
+
+            Object.keys(currencyGroups).sort().forEach(currency => {
+                const pairs = currencyGroups[currency];
+                if (pairs.length > 0) {
+                    html += generateCurrencyPnLSection(currency, pairs, pnlResults, scales);
+                }
+            });
+
+            html += `
+        </div>
+    </details>
+
+    <details style="margin-bottom: 24px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 15px; color: #1f2937; padding: 8px;">
+            &gt;&gt; FULL CORRELATION RESULTS - Click to expand
+        </summary>
+        <div style="padding: 16px 0;">`;
+
+            Object.keys(correlationResults || {}).sort().forEach(currency => {
+                html += generateCurrencyCorrSection(currency, correlationResults[currency], scales);
+            });
+
+            html += `
+        </div>
+    </details>
+</div>`;
+
+            return html;
+        }
+
+        function generateEmailReport() {
+            if (!window.batchAnalysisResults || !window.analyzedPairs) {
+                return `<html><body><p>Error: No analysis results available. Please run an analysis first.</p></body></html>`;
+            }
+
+            const scales = calculateGlobalScales(window.batchAnalysisResults, window.correlationAnalysisResults);
+
+            let emailHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+    </style>
+</head>
+<body>
+
+${generateEmailHeader(window.analysisConfig || {}, window.analyzedPairs, window.uploadedTimestamps, window.currencies || [])}
+
+${generateTop5VolTable(window.batchAnalysisResults, scales)}
+
+${generateBottom5VolTable(window.batchAnalysisResults, scales)}
+
+${Object.keys(window.correlationAnalysisResults || {}).length > 0 ? generateTop5CorrTable(window.correlationAnalysisResults, scales) : ''}
+
+${Object.keys(window.correlationAnalysisResults || {}).length > 0 ? generateBottom5CorrTable(window.correlationAnalysisResults, scales) : ''}
+
+${generateExpandableFullResults(window.batchAnalysisResults, window.correlationAnalysisResults, scales, window.currencies || [])}
+
+<div style="margin-top: 48px; padding-top: 24px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px;">
+    Generated: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST
+</div>
+
+</body>
+</html>`;
+
+            return emailHTML;
+        }
+
+        function stripHTMLTags(html) {
+            const tmp = document.createElement('DIV');
+            tmp.innerHTML = html;
+            return tmp.textContent || tmp.innerText || '';
+        }
+
+        async function copyEmailReport() {
+            try {
+                const emailHTML = generateEmailReport();
+                const plainText = stripHTMLTags(emailHTML);
+
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        'text/html': new Blob([emailHTML], { type: 'text/html' }),
+                        'text/plain': new Blob([plainText], { type: 'text/plain' })
+                    })
+                ]);
+
+                document.getElementById('exportStatus').innerHTML = 
+                    '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
+                document.getElementById('exportStatus').style.color = '#059669';
+
+                setTimeout(() => {
+                    document.getElementById('exportStatus').innerHTML = '';
+                }, 5000);
+
+            } catch (error) {
+                console.error('Copy failed:', error);
+                document.getElementById('exportStatus').innerHTML = 
+                    '✗ Copy failed. Please try again or use a different browser.';
+                document.getElementById('exportStatus').style.color = '#dc2626';
+            }
+        }
+
+        function getTop5Vol(pnlResults) {
+            return Object.entries(pnlResults)
+                .filter(([_, data]) => !data.error)
+                .map(([pair, data]) => ({
+                    pair,
+                    implVol: data.impliedVol,
+                    realVol: data.realizedVol,
+                    volDiff: data.volDiff,
+                    avgPnL: data.avgPnL
+                }))
+                .sort((a, b) => b.volDiff - a.volDiff)
+                .slice(0, 5);
+        }
+
+        function getBottom5Vol(pnlResults) {
+            return Object.entries(pnlResults)
+                .filter(([_, data]) => !data.error)
+                .map(([pair, data]) => ({
+                    pair,
+                    implVol: data.impliedVol,
+                    realVol: data.realizedVol,
+                    volDiff: data.volDiff,
+                    avgPnL: data.avgPnL
+                }))
+                .sort((a, b) => a.volDiff - b.volDiff)
+                .slice(0, 5);
+        }
+
+        function getTop5Correlations(correlationResults) {
+            const allCorrelations = [];
+            Object.entries(correlationResults || {}).forEach(([currency, data]) => {
+                if (data.correlations) {
+                    data.correlations.forEach(corr => {
+                        allCorrelations.push({
+                            currency: currency,
+                            pair1: corr.pair1,
+                            pair2: corr.pair2,
+                            impl: corr.impliedCorr,
+                            real: corr.realizedCorr,
+                            diff: corr.difference
+                        });
+                    });
+                }
+            });
+
+            return allCorrelations
+                .sort((a, b) => b.diff - a.diff)
+                .slice(0, 5);
+        }
+
+        function getBottom5Correlations(correlationResults) {
+            const allCorrelations = [];
+            Object.entries(correlationResults || {}).forEach(([currency, data]) => {
+                if (data.correlations) {
+                    data.correlations.forEach(corr => {
+                        allCorrelations.push({
+                            currency: currency,
+                            pair1: corr.pair1,
+                            pair2: corr.pair2,
+                            impl: corr.impliedCorr,
+                            real: corr.realizedCorr,
+                            diff: corr.difference
+                        });
+                    });
+                }
+            });
+
+            // Sort ascending (most negative first)
+            return allCorrelations
+                .sort((a, b) => a.diff - b.diff)
+                .slice(0, 5);
+        }
+
+        function generateBloombergChat() {
+            if (!window.uploadedTimestamps || window.uploadedTimestamps.length === 0) {
+                return 'Error: No timestamp data available';
+            }
+
+            const startTime = window.uploadedTimestamps[0];
+            const endTime = window.uploadedTimestamps[window.uploadedTimestamps.length - 1];
+            const durationHours = calculateDurationHours(window.uploadedTimestamps);
+            const rebalFreq = window.analysisConfig?.rebalancingFrequency || 'Daily';
+            const expiryText = window.analysisConfig?.optionExpiry || 'Full period';
+
+            const top5Vol = getTop5Vol(window.batchAnalysisResults || {});
+            const bottom5Vol = getBottom5Vol(window.batchAnalysisResults || {});
+            const top5Corr = getTop5Correlations(window.correlationAnalysisResults || {});
+            const bottom5Corr = getBottom5Correlations(window.correlationAnalysisResults || {});
+            const formatShortDateTime = (ts) => {
+                const d = new Date(ts);
+                return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+            };
+
+            let text = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FX Options P&L, Vol, Correlation Analysis
+${formatShortDateTime(startTime)} to ${formatShortDateTime(endTime)} EST (${durationHours}h)
+Rebal: ${rebalFreq} | Expiry: ${expiryText} | $100M per strike
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOP 5 VOL (Real > Impl):
+${top5Vol.map((item, i) => 
+    `${i+1}. ${item.pair.padEnd(8)} ${(item.volDiff >= 0 ? '+' : '')}${(item.volDiff*100).toFixed(2)}%  (${(item.implVol*100).toFixed(2)}% → ${(item.realVol*100).toFixed(2)}%)  ${formatPnLRounded(item.avgPnL)}`
+).join('\n')}
+
+BOTTOM 5 VOL (Real < Impl):
+${bottom5Vol.map((item, i) => {
+    const totalPairs = Object.keys(window.batchAnalysisResults || {}).filter(p => !window.batchAnalysisResults[p].error).length;
+    const rank = totalPairs - 4 + i;
+    return `${rank}. ${item.pair.padEnd(8)} ${(item.volDiff >= 0 ? '+' : '')}${(item.volDiff*100).toFixed(2)}%  (${(item.implVol*100).toFixed(2)}% → ${(item.realVol*100).toFixed(2)}%)  ${formatPnLRounded(item.avgPnL)}`;
+}).join('\n')}
+
+${top5Corr.length > 0 ? `TOP 5 CORR:
+${top5Corr.map((item, i) => 
+    `${i+1}. ${item.currency}: ${item.pair1}-${item.pair2} ${(item.diff >= 0 ? '+' : '')}${Math.round(item.diff*100)}% (${Math.round(item.impl*100)}%→${Math.round(item.real*100)}%)`
+).join('\n')}
+
+` : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Full report in email.
+`;
+
+            return text;
+        }
+
+        async function copyBloombergChat() {
+            try {
+                const bbgText = generateBloombergChat();
+
+                await navigator.clipboard.writeText(bbgText);
+
+                document.getElementById('exportStatus').innerHTML = 
+                    '✓ Bloomberg chat copied! Paste into terminal.';
+                document.getElementById('exportStatus').style.color = '#059669';
+
+                setTimeout(() => {
+                    document.getElementById('exportStatus').innerHTML = '';
+                }, 5000);
+
+            } catch (error) {
+                console.error('Copy failed:', error);
+                document.getElementById('exportStatus').innerHTML = 
+                    '✗ Copy failed. Please try again.';
+                document.getElementById('exportStatus').style.color = '#dc2626';
+            }
+        }
+
         function displayResultsWithTabs(pnlResults, correlationResults) {
+            // Store results globally for export functions
+            window.batchAnalysisResults = pnlResults;
+            window.correlationAnalysisResults = correlationResults || {};
+            window.analyzedPairs = Object.keys(pnlResults).filter(pair => !pnlResults[pair].error);
+            window.uploadedTimestamps = batchData.timestamps || [];
+            window.currencies = batchData.currencies || [];
+            
+            // Store analysis config
+            const baseFreq = parseInt(document.getElementById('batchBaseFrequency').value);
+            const hedgeFreq = parseInt(document.getElementById('batchHedgeFrequency').value);
+            const expiryMode = document.querySelector('input[name="batchExpiryMode"]:checked').value;
+            let optionTenorMinutes;
+            if (expiryMode === 'custom') {
+                const customValue = parseFloat(document.getElementById('customExpiryInput').value);
+                const customUnit = document.getElementById('customExpiryUnit').value;
+                optionTenorMinutes = (customUnit === 'hours') ? customValue * 60 : customValue;
+            }
+            
+            // Map rebalancing frequency
+            const rebalFreqMap = {
+                60: 'Hourly',
+                1440: 'Daily',
+                10080: 'Weekly'
+            };
+            
+            // Convert option expiry to hours for display
+            let expiryHours;
+            let expiryDisplay = 'Full period';
+            if (expiryMode === 'custom' && optionTenorMinutes) {
+                expiryHours = Math.round(optionTenorMinutes / 60);
+                expiryDisplay = `${expiryHours} hours`;
+            } else {
+                // Calculate from analysis window
+                const analysisData = window.currentAnalysisData || batchData;
+                if (analysisData.timestamps && analysisData.timestamps.length > 0) {
+                    const startTime = new Date(analysisData.timestamps[0]);
+                    const endTime = new Date(analysisData.timestamps[analysisData.timestamps.length - 1]);
+                    expiryHours = Math.round((endTime - startTime) / (1000 * 60 * 60));
+                    expiryDisplay = `${expiryHours} hours (end of series)`;
+                }
+            }
+            
+            window.analysisConfig = {
+                rebalancingFrequency: rebalFreqMap[hedgeFreq] || `Every ${hedgeFreq} minutes`,
+                optionExpiry: expiryDisplay,
+                optionExpiryHours: expiryHours
+            };
+            
             // Sort pairs by avgPnL
             const pairResults = Object.entries(pnlResults)
                 .filter(([_, result]) => !result.error)
@@ -3212,7 +4254,20 @@
                 </div>
             `;
 
-            document.getElementById('batchResults').innerHTML = html;
+            // Update content div instead of replacing entire batchResults
+            const contentDiv = document.getElementById('batchResultsContent');
+            if (contentDiv) {
+                contentDiv.innerHTML = html;
+            } else {
+                // Fallback: if content div doesn't exist, use batchResults
+                document.getElementById('batchResults').innerHTML = html;
+            }
+            
+            // Show export buttons
+            const exportButtons = document.getElementById('exportButtons');
+            if (exportButtons) {
+                exportButtons.style.display = 'block';
+            }
         }
 
         function switchResultsTab(tabName) {
