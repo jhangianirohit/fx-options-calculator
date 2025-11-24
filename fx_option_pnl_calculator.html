@@ -4076,12 +4076,11 @@
                 const data = correlationResults[mainCurrency];
                 if (!data || !data.correlations) return;
                 
-                // Group correlations by second currency
+                // Group correlations by ALL currencies that appear (not just secondary)
                 const nestedGroups = {};
                 
                 data.correlations.forEach(corr => {
                     // Extract currencies from pair names (format: "EURUSD" or "EUR/USD")
-                    // Try to parse pair1 and pair2
                     const pair1 = corr.pair1 || '';
                     const pair2 = corr.pair2 || '';
                     
@@ -4090,49 +4089,47 @@
                     let pair2Currencies = [];
                     
                     if (pair1.includes('/')) {
-                        pair1Currencies = pair1.split('/');
+                        pair1Currencies = pair1.split('/').map(c => c.trim());
                     } else if (pair1.length >= 6) {
-                        pair1Currencies = [pair1.substring(0, 3), pair1.substring(3, 6)];
+                        pair1Currencies = [pair1.substring(0, 3).trim(), pair1.substring(3, 6).trim()];
                     }
                     
                     if (pair2.includes('/')) {
-                        pair2Currencies = pair2.split('/');
+                        pair2Currencies = pair2.split('/').map(c => c.trim());
                     } else if (pair2.length >= 6) {
-                        pair2Currencies = [pair2.substring(0, 3), pair2.substring(3, 6)];
+                        pair2Currencies = [pair2.substring(0, 3).trim(), pair2.substring(3, 6).trim()];
                     }
                     
-                    // Find the secondary currency (the one that's not mainCurrency)
-                    let secondaryCurrency;
+                    // Get all unique currencies mentioned (excluding mainCurrency)
+                    const allCurrenciesSet = new Set([...pair1Currencies, ...pair2Currencies]);
+                    allCurrenciesSet.delete(mainCurrency);
                     
-                    // Check which currency appears in both pairs (besides mainCurrency)
-                    const allCurrencies = [...pair1Currencies, ...pair2Currencies];
-                    const currencyCounts = {};
-                    allCurrencies.forEach(c => {
-                        if (c) {
-                            currencyCounts[c] = (currencyCounts[c] || 0) + 1;
+                    // Add this correlation to ALL secondary currency groups it involves
+                    allCurrenciesSet.forEach(secondaryCurrency => {
+                        if (!secondaryCurrency) return;
+                        
+                        if (!nestedGroups[secondaryCurrency]) {
+                            nestedGroups[secondaryCurrency] = [];
+                        }
+                        
+                        // Check if this correlation involves the secondary currency
+                        // (it appears in at least one of the pairs)
+                        const involvesCurrency = 
+                            pair1Currencies.includes(secondaryCurrency) || 
+                            pair2Currencies.includes(secondaryCurrency);
+                        
+                        if (involvesCurrency) {
+                            // Check for duplicates before adding
+                            const isDuplicate = nestedGroups[secondaryCurrency].some(existing =>
+                                (existing.pair1 === corr.pair1 && existing.pair2 === corr.pair2) ||
+                                (existing.pair1 === corr.pair2 && existing.pair2 === corr.pair1)
+                            );
+                            
+                            if (!isDuplicate) {
+                                nestedGroups[secondaryCurrency].push(corr);
+                            }
                         }
                     });
-                    
-                    // The secondary currency is the one that appears most (besides main)
-                    for (let curr of CURRENCY_ORDER) {
-                        if (curr !== mainCurrency && currencyCounts[curr] >= 2) {
-                            secondaryCurrency = curr;
-                            break;
-                        }
-                    }
-                    
-                    if (!secondaryCurrency) {
-                        // Fallback: pick first non-main currency from either pair
-                        secondaryCurrency = pair1Currencies.find(c => c && c !== mainCurrency) || 
-                                           pair2Currencies.find(c => c && c !== mainCurrency) || 
-                                           'OTHER';
-                    }
-                    
-                    if (!nestedGroups[secondaryCurrency]) {
-                        nestedGroups[secondaryCurrency] = [];
-                    }
-                    
-                    nestedGroups[secondaryCurrency].push(corr);
                 });
                 
                 // Sort nested groups by currency order
@@ -4196,10 +4193,11 @@
 
                 // Nested groups
                 Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
+                    const corrArray = Array.isArray(correlations) ? correlations : [];
                     html += `
             <div style="margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 6px;">
                 <h4 style="font-size: 13px; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
-                    ${mainCurrency}-${secondaryCurrency} (${correlations.length} correlations)
+                    ${mainCurrency}-${secondaryCurrency} (${corrArray.length} correlations)
                 </h4>
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px;">
@@ -4214,7 +4212,7 @@
                         </thead>
                         <tbody>`;
 
-                    correlations.forEach(corr => {
+                    corrArray.forEach(corr => {
                         const implCorrBg = getCellColor(corr.impliedCorr, scales.impliedCorr);
                         const realCorrBg = getCellColor(corr.realizedCorr, scales.realizedCorr);
                         const diffBg = getCellColor(corr.difference, scales.corrDiff);
@@ -4240,9 +4238,9 @@
                     });
 
                     // Sub-group summary
-                    const subAvgImpl = correlations.reduce((sum, c) => sum + c.impliedCorr, 0) / correlations.length;
-                    const subAvgReal = correlations.reduce((sum, c) => sum + c.realizedCorr, 0) / correlations.length;
-                    const subAvgDiff = correlations.reduce((sum, c) => sum + c.difference, 0) / correlations.length;
+                    const subAvgImpl = corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.impliedCorr, 0) / corrArray.length : 0;
+                    const subAvgReal = corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.realizedCorr, 0) / corrArray.length : 0;
+                    const subAvgDiff = corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.difference, 0) / corrArray.length : 0;
 
                     const subAvgImplBg = getCellColor(subAvgImpl, scales.impliedCorr);
                     const subAvgRealBg = getCellColor(subAvgReal, scales.realizedCorr);
@@ -4777,18 +4775,19 @@ Full report in email.
 
                 // Nested groups
                 Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
+                    const corrArray = Array.isArray(correlations) ? correlations : [];
                     html += `
                 <div class="nested-correlation-group" style="margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 6px;">
                     <h4 style="font-size: 14px; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
-                        ${mainCurrency}-${secondaryCurrency} (${correlations.length} correlations)
+                        ${mainCurrency}-${secondaryCurrency} (${corrArray.length} correlations)
                     </h4>`;
                     
                     // Use existing generateCurrencyCorrelationTable but with filtered correlations
                     const tempGroupData = { 
-                        correlations: correlations,
-                        avgImpliedCorr: correlations.reduce((sum, c) => sum + c.impliedCorr, 0) / correlations.length,
-                        avgRealizedCorr: correlations.reduce((sum, c) => sum + c.realizedCorr, 0) / correlations.length,
-                        avgDifference: correlations.reduce((sum, c) => sum + c.difference, 0) / correlations.length
+                        correlations: corrArray,
+                        avgImpliedCorr: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.impliedCorr, 0) / corrArray.length : 0,
+                        avgRealizedCorr: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.realizedCorr, 0) / corrArray.length : 0,
+                        avgDifference: corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.difference, 0) / corrArray.length : 0
                     };
                     html += generateCurrencyCorrelationTable(`${mainCurrency}-${secondaryCurrency}`, tempGroupData);
                 });
