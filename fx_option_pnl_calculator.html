@@ -1525,6 +1525,52 @@
         const MAX_CUSTOM_STRIKES = 5;
         let customStrikeCounter = 0;
 
+        // Master currency ordering for consistent display
+        // G10 currencies first, then EM pairs
+        const CURRENCY_ORDER = [
+            'USD',   // US Dollar
+            'EUR',   // Euro
+            'GBP',   // British Pound
+            'CHF',   // Swiss Franc
+            'JPY',   // Japanese Yen
+            'AUD',   // Australian Dollar
+            'NZD',   // New Zealand Dollar
+            'CAD',   // Canadian Dollar
+            'MXN',   // Mexican Peso
+            'BRL',   // Brazilian Real
+            'ZAR',   // South African Rand
+            'TRY',   // Turkish Lira
+            'RUB',   // Russian Ruble
+            'INR',   // Indian Rupee
+            'CNY',   // Chinese Yuan (Onshore)
+            'CNH',   // Chinese Yuan (Offshore)
+            'KRW',   // South Korean Won
+            'TWD',   // Taiwan Dollar
+            'SGD',   // Singapore Dollar
+            'HKD',   // Hong Kong Dollar
+            'THB',   // Thai Baht
+            'IDR',   // Indonesian Rupiah
+            'MYR',   // Malaysian Ringgit
+            'PHP',   // Philippine Peso
+            'PLN',   // Polish Zloty
+            'CZK',   // Czech Koruna
+            'HUF',   // Hungarian Forint
+            'ILS',   // Israeli Shekel
+            'CLP',   // Chilean Peso
+            'COP',   // Colombian Peso
+            'PEN',   // Peruvian Sol
+            'ARS'    // Argentine Peso
+        ];
+
+        function getCurrencyRank(currency) {
+            const index = CURRENCY_ORDER.indexOf(currency);
+            return index === -1 ? 999 : index; // Unknown currencies go to end
+        }
+
+        function sortCurrencies(currencies) {
+            return [...currencies].sort((a, b) => getCurrencyRank(a) - getCurrencyRank(b));
+        }
+
         // ============ TAB SWITCHING ============
 
         function switchTab(tabName) {
@@ -4020,6 +4066,92 @@
             return html;
         }
 
+        function restructureCorrelations(correlationResults) {
+            // Sort currency blocks by order
+            const sortedCurrencies = sortCurrencies(Object.keys(correlationResults || {}));
+            
+            const restructured = {};
+            
+            sortedCurrencies.forEach(mainCurrency => {
+                const data = correlationResults[mainCurrency];
+                if (!data || !data.correlations) return;
+                
+                // Group correlations by second currency
+                const nestedGroups = {};
+                
+                data.correlations.forEach(corr => {
+                    // Extract currencies from pair names (format: "EURUSD" or "EUR/USD")
+                    // Try to parse pair1 and pair2
+                    const pair1 = corr.pair1 || '';
+                    const pair2 = corr.pair2 || '';
+                    
+                    // Extract currencies (handle both "EURUSD" and "EUR/USD" formats)
+                    let pair1Currencies = [];
+                    let pair2Currencies = [];
+                    
+                    if (pair1.includes('/')) {
+                        pair1Currencies = pair1.split('/');
+                    } else if (pair1.length >= 6) {
+                        pair1Currencies = [pair1.substring(0, 3), pair1.substring(3, 6)];
+                    }
+                    
+                    if (pair2.includes('/')) {
+                        pair2Currencies = pair2.split('/');
+                    } else if (pair2.length >= 6) {
+                        pair2Currencies = [pair2.substring(0, 3), pair2.substring(3, 6)];
+                    }
+                    
+                    // Find the secondary currency (the one that's not mainCurrency)
+                    let secondaryCurrency;
+                    
+                    // Check which currency appears in both pairs (besides mainCurrency)
+                    const allCurrencies = [...pair1Currencies, ...pair2Currencies];
+                    const currencyCounts = {};
+                    allCurrencies.forEach(c => {
+                        if (c) {
+                            currencyCounts[c] = (currencyCounts[c] || 0) + 1;
+                        }
+                    });
+                    
+                    // The secondary currency is the one that appears most (besides main)
+                    for (let curr of CURRENCY_ORDER) {
+                        if (curr !== mainCurrency && currencyCounts[curr] >= 2) {
+                            secondaryCurrency = curr;
+                            break;
+                        }
+                    }
+                    
+                    if (!secondaryCurrency) {
+                        // Fallback: pick first non-main currency from either pair
+                        secondaryCurrency = pair1Currencies.find(c => c && c !== mainCurrency) || 
+                                           pair2Currencies.find(c => c && c !== mainCurrency) || 
+                                           'OTHER';
+                    }
+                    
+                    if (!nestedGroups[secondaryCurrency]) {
+                        nestedGroups[secondaryCurrency] = [];
+                    }
+                    
+                    nestedGroups[secondaryCurrency].push(corr);
+                });
+                
+                // Sort nested groups by currency order
+                const sortedNestedGroups = {};
+                const sortedSecondaries = sortCurrencies(Object.keys(nestedGroups));
+                
+                sortedSecondaries.forEach(secondary => {
+                    sortedNestedGroups[secondary] = nestedGroups[secondary];
+                });
+                
+                restructured[mainCurrency] = {
+                    nestedGroups: sortedNestedGroups,
+                    allCorrelations: data.correlations // Keep original for overall summary
+                };
+            });
+            
+            return restructured;
+        }
+
         function generateExpandableFullResults(pnlResults, correlationResults, scales, currencies) {
             let html = `
 <div style="margin-top: 48px;">
@@ -4031,7 +4163,10 @@
 
             const currencyGroups = buildCurrencyGroups(pnlResults, currencies);
 
-            Object.keys(currencyGroups).sort().forEach(currency => {
+            // Sort currencies by order
+            const sortedCurrencies = sortCurrencies(Object.keys(currencyGroups));
+            
+            sortedCurrencies.forEach(currency => {
                 const pairs = currencyGroups[currency];
                 if (pairs.length > 0) {
                     html += generateCurrencyPnLSection(currency, pairs, pnlResults, scales);
@@ -4048,8 +4183,133 @@
         </summary>
         <div style="padding: 16px 0;">`;
 
-            Object.keys(correlationResults || {}).sort().forEach(currency => {
-                html += generateCurrencyCorrSection(currency, correlationResults[currency], scales);
+            // Use restructured correlations with nesting
+            const restructured = restructureCorrelations(correlationResults);
+            
+            Object.entries(restructured).forEach(([mainCurrency, data]) => {
+                html += `
+        <details style="margin: 16px 0; border-left: 3px solid #1e40af; padding-left: 16px;">
+            <summary style="cursor: pointer; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+                ▶ ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)
+            </summary>
+            <div>`;
+
+                // Nested groups
+                Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
+                    html += `
+            <div style="margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                <h4 style="font-size: 13px; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+                    ${mainCurrency}-${secondaryCurrency} (${correlations.length} correlations)
+                </h4>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #e5e7eb; background: #ffffff;">
+                                <th style="padding: 10px; text-align: left;">Pair 1</th>
+                                <th style="padding: 10px; text-align: left;">Pair 2</th>
+                                <th style="padding: 10px; text-align: right;">Impl Corr</th>
+                                <th style="padding: 10px; text-align: right;">Real Corr</th>
+                                <th style="padding: 10px; text-align: right;">Difference</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+                    correlations.forEach(corr => {
+                        const implCorrBg = getCellColor(corr.impliedCorr, scales.impliedCorr);
+                        const realCorrBg = getCellColor(corr.realizedCorr, scales.realizedCorr);
+                        const diffBg = getCellColor(corr.difference, scales.corrDiff);
+                        
+                        const implCorrText = getTextColorForBackground(implCorrBg);
+                        const realCorrText = getTextColorForBackground(realCorrBg);
+                        const diffText = getTextColorForBackground(diffBg);
+
+                        html += `
+                            <tr style="border-bottom: 1px solid #f3f4f6;">
+                                <td style="padding: 10px;">${corr.pair1}</td>
+                                <td style="padding: 10px;">${corr.pair2}</td>
+                                <td style="padding: 10px; text-align: right; background-color: ${implCorrBg}; color: ${implCorrText}; font-weight: 500;">
+                                    ${formatCorrInteger(corr.impliedCorr)}
+                                </td>
+                                <td style="padding: 10px; text-align: right; background-color: ${realCorrBg}; color: ${realCorrText}; font-weight: 500;">
+                                    ${formatCorrInteger(corr.realizedCorr)}
+                                </td>
+                                <td style="padding: 10px; text-align: right; background-color: ${diffBg}; color: ${diffText}; font-weight: 500;">
+                                    ${corr.difference >= 0 ? '+' : ''}${formatCorrInteger(corr.difference)}
+                                </td>
+                            </tr>`;
+                    });
+
+                    // Sub-group summary
+                    const subAvgImpl = correlations.reduce((sum, c) => sum + c.impliedCorr, 0) / correlations.length;
+                    const subAvgReal = correlations.reduce((sum, c) => sum + c.realizedCorr, 0) / correlations.length;
+                    const subAvgDiff = correlations.reduce((sum, c) => sum + c.difference, 0) / correlations.length;
+
+                    const subAvgImplBg = getCellColor(subAvgImpl, scales.impliedCorr);
+                    const subAvgRealBg = getCellColor(subAvgReal, scales.realizedCorr);
+                    const subAvgDiffBg = getCellColor(subAvgDiff, scales.corrDiff);
+
+                    const subAvgImplText = getTextColorForBackground(subAvgImplBg);
+                    const subAvgRealText = getTextColorForBackground(subAvgRealBg);
+                    const subAvgDiffText = getTextColorForBackground(subAvgDiffBg);
+
+                    html += `
+                        </tbody>
+                        <tfoot>
+                            <tr style="border-top: 2px solid #1e40af; background: #f0f9ff; font-weight: 600;">
+                                <td colspan="2" style="padding: 10px;">SUB-GROUP AVERAGE</td>
+                                <td style="padding: 10px; text-align: right; background-color: ${subAvgImplBg}; color: ${subAvgImplText};">
+                                    ${formatCorrInteger(subAvgImpl)}
+                                </td>
+                                <td style="padding: 10px; text-align: right; background-color: ${subAvgRealBg}; color: ${subAvgRealText};">
+                                    ${formatCorrInteger(subAvgReal)}
+                                </td>
+                                <td style="padding: 10px; text-align: right; background-color: ${subAvgDiffBg}; color: ${subAvgDiffText};">
+                                    ${subAvgDiff >= 0 ? '+' : ''}${formatCorrInteger(subAvgDiff)}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>`;
+                });
+
+                // Overall block summary
+                const uniqueCorrelations = data.allCorrelations;
+                const overallAvgImpl = uniqueCorrelations.reduce((sum, c) => sum + c.impliedCorr, 0) / uniqueCorrelations.length;
+                const overallAvgReal = uniqueCorrelations.reduce((sum, c) => sum + c.realizedCorr, 0) / uniqueCorrelations.length;
+                const overallAvgDiff = uniqueCorrelations.reduce((sum, c) => sum + c.difference, 0) / uniqueCorrelations.length;
+
+                const overallImplBg = getCellColor(overallAvgImpl, scales.impliedCorr);
+                const overallRealBg = getCellColor(overallAvgReal, scales.realizedCorr);
+                const overallDiffBg = getCellColor(overallAvgDiff, scales.corrDiff);
+
+                const overallImplText = getTextColorForBackground(overallImplBg);
+                const overallRealText = getTextColorForBackground(overallRealBg);
+                const overallDiffText = getTextColorForBackground(overallDiffBg);
+
+                html += `
+            <div style="margin-top: 20px; padding: 16px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px;">
+                <div style="font-weight: 700; margin-bottom: 12px; color: #92400e;">
+                    ${mainCurrency} OVERALL AVERAGE (${uniqueCorrelations.length} unique correlations)
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
+                    <tr>
+                        <td style="padding: 8px; text-align: center; background-color: ${overallImplBg}; color: ${overallImplText}; font-weight: 600; border-radius: 4px;">
+                            Impl: ${formatCorrInteger(overallAvgImpl)}
+                        </td>
+                        <td style="width: 8px;"></td>
+                        <td style="padding: 8px; text-align: center; background-color: ${overallRealBg}; color: ${overallRealText}; font-weight: 600; border-radius: 4px;">
+                            Real: ${formatCorrInteger(overallAvgReal)}
+                        </td>
+                        <td style="width: 8px;"></td>
+                        <td style="padding: 8px; text-align: center; background-color: ${overallDiffBg}; color: ${overallDiffText}; font-weight: 600; border-radius: 4px;">
+                            Diff: ${overallAvgDiff >= 0 ? '+' : ''}${formatCorrInteger(overallAvgDiff)}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            </div>
+        </details>`;
             });
 
             html += `
@@ -4414,9 +4674,8 @@ Full report in email.
             // Currency Groups
             const analyzedPairs = [...new Set(pairResults.map(([pair, _]) => pair))]; // Remove duplicates
             const currencyBlocks = buildCurrencyBlocksFromResults(analyzedPairs, batchData.currencies || []);
-            const sortedCurrencies = Object.keys(currencyBlocks).sort((a, b) =>
-                currencyBlocks[b].length - currencyBlocks[a].length
-            );
+            // Sort currencies by order (G10 first, then EM)
+            const sortedCurrencies = sortCurrencies(Object.keys(currencyBlocks));
 
             html += '<div id="currencyGroupsContent">';
             sortedCurrencies.forEach(currency => {
@@ -4506,15 +4765,61 @@ Full report in email.
             html += generateTopBottomCorrelations(correlationResults);
 
             // Individual currency group tables
-            const currencies = Object.keys(correlationResults).sort((a, b) => {
-                // USD first, then alphabetical
-                if (a === 'USD') return -1;
-                if (b === 'USD') return 1;
-                return a.localeCompare(b);
-            });
+            // Use restructured correlations with nesting
+            const restructured = restructureCorrelations(correlationResults);
+            
+            Object.entries(restructured).forEach(([mainCurrency, data]) => {
+                html += `
+            <div class="currency-correlation-block" style="margin-bottom: 32px;">
+                <h3 style="font-size: 18px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #1e40af;">
+                    ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)
+                </h3>`;
 
-            currencies.forEach(currency => {
-                html += generateCurrencyCorrelationTable(currency, correlationResults[currency]);
+                // Nested groups
+                Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
+                    html += `
+                <div class="nested-correlation-group" style="margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                    <h4 style="font-size: 14px; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+                        ${mainCurrency}-${secondaryCurrency} (${correlations.length} correlations)
+                    </h4>`;
+                    
+                    // Use existing generateCurrencyCorrelationTable but with filtered correlations
+                    const tempGroupData = { 
+                        correlations: correlations,
+                        avgImpliedCorr: correlations.reduce((sum, c) => sum + c.impliedCorr, 0) / correlations.length,
+                        avgRealizedCorr: correlations.reduce((sum, c) => sum + c.realizedCorr, 0) / correlations.length,
+                        avgDifference: correlations.reduce((sum, c) => sum + c.difference, 0) / correlations.length
+                    };
+                    html += generateCurrencyCorrelationTable(`${mainCurrency}-${secondaryCurrency}`, tempGroupData);
+                });
+
+                // Overall block summary
+                const uniqueCorrelations = data.allCorrelations;
+                const overallAvgImpl = uniqueCorrelations.reduce((sum, c) => sum + c.impliedCorr, 0) / uniqueCorrelations.length;
+                const overallAvgReal = uniqueCorrelations.reduce((sum, c) => sum + c.realizedCorr, 0) / uniqueCorrelations.length;
+                const overallAvgDiff = uniqueCorrelations.reduce((sum, c) => sum + c.difference, 0) / uniqueCorrelations.length;
+
+                html += `
+                <div class="overall-summary" style="margin-top: 20px; padding: 16px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px;">
+                    <div style="font-weight: 700; margin-bottom: 12px; color: #92400e;">
+                        ${mainCurrency} OVERALL AVERAGE (${uniqueCorrelations.length} unique correlations)
+                    </div>
+                    <div class="summary-bar" style="display: flex; gap: 16px; justify-content: space-around;">
+                        <div class="summary-item">
+                            <div class="summary-label">Avg Impl Corr</div>
+                            <div class="summary-value">${formatCorrelation(overallAvgImpl)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Avg Real Corr</div>
+                            <div class="summary-value">${formatCorrelation(overallAvgReal)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Avg Difference</div>
+                            <div class="summary-value ${overallAvgDiff >= 0 ? 'pnl-positive' : 'pnl-negative'}">${formatCorrelationDiff(overallAvgDiff)}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
             });
 
             return html;
