@@ -3544,7 +3544,7 @@
                     volDifference: data.volDiff,
                     avgPnL: data.avgPnL
                 }))
-                .sort((a, b) => b.volDifference - a.volDifference)
+                .sort((a, b) => b.avgPnL - a.avgPnL)
                 .slice(0, 5);
 
             let html = `
@@ -3615,7 +3615,7 @@
                     volDifference: data.volDiff,
                     avgPnL: data.avgPnL
                 }))
-                .sort((a, b) => a.volDifference - b.volDifference)
+                .sort((a, b) => a.avgPnL - b.avgPnL)
                 .slice(0, 5);
 
             const totalPairs = Object.keys(pnlResults).filter(p => !pnlResults[p].error).length;
@@ -4812,12 +4812,12 @@ Full report in email.
             
             Object.entries(restructured).forEach(([mainCurrency, data]) => {
                 html += `
-            <div class="currency-correlation-block" style="margin-bottom: 32px;">
-                <h3 style="font-size: 18px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #1e40af;">
+            <div class="currency-correlation-block" style="margin-bottom: 32px; padding: 0;">
+                <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-left: 0;">
                     ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)
                 </h3>`;
 
-                // Nested groups
+                // Nested groups - NO ADDITIONAL PADDING
                 Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
                     const corrArray = Array.isArray(correlations) ? correlations : [];
                     const mainPair = constructMainPair(mainCurrency, secondaryCurrency);
@@ -4826,9 +4826,9 @@ Full report in email.
                     const normalizedCorrs = corrArray.map(corr => normalizeCorrelationForDisplay(corr, mainPair));
                     
                     html += `
-                <div class="nested-correlation-group" style="margin: 16px 0; padding: 12px; background: #f9fafb; border-radius: 6px;">
-                    <h4 style="font-size: 14px; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
-                        ${mainCurrency}-${secondaryCurrency} (${corrArray.length} correlations)
+                <div class="nested-correlation-group" style="margin: 16px 0; padding: 0;">
+                    <h4 style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 12px; padding-left: 0;">
+                        ${mainCurrency}-${secondaryCurrency} Correlations (${corrArray.length})
                     </h4>`;
                     
                     // Use existing generateCurrencyCorrelationTable but with normalized correlations
