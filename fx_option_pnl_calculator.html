@@ -1473,7 +1473,7 @@
             <!-- Results Section -->
             <div id="batchResults" style="display: none;">
                 <h2>Results</h2>
-                
+
                 <!-- Export Buttons -->
                 <div id="exportButtons" style="display: none; margin-top: 24px; padding-top: 24px; border-top: 2px solid #e5e7eb;">
                     <h3 style="margin-bottom: 16px; color: #1f2937;">Export Results</h3>
@@ -3842,6 +3842,11 @@
                 if (groups[ccy2]) groups[ccy2].push(pair);
             });
 
+            // Debug logging
+            console.log('=== EMAIL P&L CURRENCY GROUPS ===');
+            console.log('Groups:', Object.keys(groups));
+            console.log('USD pairs:', groups['USD']);
+
             return groups;
         }
 
@@ -4719,6 +4724,12 @@ Full report in email.
             // Sort currencies by order (G10 first, then EM)
             const sortedCurrencies = sortCurrencies(Object.keys(currencyBlocks));
 
+            // Debug logging
+            console.log('=== P&L BLOCK DEBUG ===');
+            console.log('Sorted currencies for P&L:', sortedCurrencies);
+            console.log('USD in list?', sortedCurrencies.includes('USD'));
+            console.log('USD group:', currencyBlocks['USD']);
+
             html += '<div id="currencyGroupsContent">';
             sortedCurrencies.forEach(currency => {
                 const pairsInBlock = currencyBlocks[currency];
@@ -4729,6 +4740,7 @@ Full report in email.
                     })
                     .filter(r => r !== null);
 
+                // Show block even if only 1 pair (P&L doesn't need minimum like correlations)
                 if (pairsWithResults.length === 0) return;
 
                 const groupAvg = pairsWithResults.reduce((sum, [_, result]) => sum + result.avgPnL, 0) / pairsWithResults.length;
@@ -5132,10 +5144,8 @@ Full report in email.
         function buildCurrencyBlocksFromResults(analyzedPairs, currencies) {
             const blocks = {};
 
-            // For each currency (except USD), find ALL pairs that include it
+            // For each currency, find ALL pairs that include it
             currencies.forEach(currency => {
-                if (currency === 'USD') return; // Skip USD block (would be too large)
-
                 const pairsInBlock = analyzedPairs.filter(pair =>
                     pair.includes(currency)
                 );
@@ -5144,6 +5154,13 @@ Full report in email.
                     blocks[currency] = pairsInBlock;
                 }
             });
+
+            // Debug logging
+            console.log('=== P&L CURRENCY GROUPS ===');
+            console.log('Analyzed pairs:', analyzedPairs);
+            console.log('Currencies:', currencies);
+            console.log('Currency blocks:', Object.keys(blocks));
+            console.log('USD pairs:', blocks['USD']);
 
             return blocks;
         }
