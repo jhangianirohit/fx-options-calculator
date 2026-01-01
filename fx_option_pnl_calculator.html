@@ -1,8 +1,12 @@
 <!DOCTYPE html>
+<!-- VERSION: 2024-01-01-v3 - Force cache refresh -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>FX Option P&L Calculator</title>
     <!-- SheetJS library for Excel parsing -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -5313,7 +5317,11 @@ Full report in email.
 
         // Open chart modal
         function openChartModal(pair, strikeType) {
+            console.log('=== openChartModal ===', pair, strikeType);
             const modal = document.getElementById('chartModal');
+            console.log('Modal element:', modal);
+            console.log('Modal class before:', modal?.className);
+            
             if (!modal) {
                 alert('Modal not found');
                 return;
@@ -5323,6 +5331,8 @@ Full report in email.
             modal.style.display = 'flex';
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+            console.log('Modal class after:', modal.className);
+            console.log('Modal display:', window.getComputedStyle(modal).display);
             
             // Update title
             const strikeNames = {
@@ -5370,12 +5380,15 @@ Full report in email.
 
         // Close chart modal
         function closeChartModal() {
+            console.log('closeChartModal called');
             const modal = document.getElementById('chartModal');
             if (modal) {
                 modal.style.display = 'none';
                 modal.classList.remove('active');
             }
+            // Always restore body scroll
             document.body.style.overflow = '';
+            document.body.style.overflowY = 'auto';
         }
 
         // Load and display chart data
@@ -5657,6 +5670,9 @@ Full report in email.
                 const cell = e.target.closest('.chart-cell');
                 
                 if (cell) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     const pair = cell.getAttribute('data-pair');
                     const strike = cell.getAttribute('data-strike');
                     
@@ -8079,46 +8095,8 @@ Full report in email.
             console.log("Modal computed style display:", window.getComputedStyle(modal).display);
         }
 
-        function closeChartModal() {
-            console.log("closeChartModal called");
-            const modal = document.getElementById('chartModal');
-            if (modal) {
-                modal.style.display = 'none';
-            }
-            // Clear canvas
-            const canvas = document.getElementById('pnlChart');
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-            }
-        }
-
-        // Close modal when clicking outside of it
-        window.onclick = function(event) {
-            const modal = document.getElementById('chartModal');
-            if (event.target === modal) {
-                closeChartModal();
-            }
-        }
-
         // No auto-calculate on load - wait for user input
     </script>
-
-    <!-- Modal for P&L Chart -->
-    <div id="chartModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="chartTitle">P&L Path</h2>
-                <span class="close" onclick="closeChartModal()">&times;</span>
-            </div>
-            <div class="chart-container">
-                <canvas id="pnlChart"></canvas>
-            </div>
-            <div class="chart-stats" id="chartStats">
-                <!-- Stats will be populated dynamically -->
-            </div>
-        </div>
-    </div>
 
     <!-- Chart Modal (CSP-safe: no inline handlers) -->
     <div id="chartModal" class="modal-overlay">
