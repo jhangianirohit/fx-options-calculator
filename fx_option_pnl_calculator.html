@@ -6,7 +6,8 @@
     <title>FX Option P&L Calculator</title>
     <!-- SheetJS library for Excel parsing -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <!-- Using custom Canvas-based charts (no external dependencies) -->
+    <!-- Plotly.js for interactive charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -892,6 +893,161 @@ details > div {
 .block-controls .btn {
     padding: 6px 12px;
     font-size: 12px;
+}
+
+/* ============================================
+   Modal System for Charts
+   ============================================ */
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 1000;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.modal-overlay.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 1200px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-white);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 32px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.15s;
+}
+
+.modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-white);
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+}
+
+/* Pair info summary */
+.pair-info-summary {
+    background: var(--bg-main);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.info-value {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-white);
+}
+
+/* Strike breakdown table */
+.strike-breakdown-table {
+    margin-top: 24px;
+}
+
+.strike-breakdown-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.strike-breakdown-table th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--bg-main);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.strike-breakdown-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Clickable cells */
+.clickable-cell {
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.clickable-cell:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px var(--cyan);
+    z-index: 10;
 }
 
 .batch-tab {
@@ -4619,6 +4775,10 @@ Full report in email.
             window.correlationAnalysisResults = correlationResults || {};
             window.analyzedPairs = Object.keys(pnlResults).filter(pair => !pnlResults[pair].error);
             window.uploadedTimestamps = batchData.timestamps || [];
+            
+            // Store results for chart modal access
+            window.lastPnLResults = pnlResults;
+            window.lastTimestamps = batchData.timestamps || [];
             window.currencies = batchData.currencies || [];
             
             // Store analysis config
@@ -5132,6 +5292,286 @@ Full report in email.
             
             contents.forEach(content => content.classList.add('collapsed'));
         }
+
+        // ============================================
+        // MODAL CHART SYSTEM
+        // ============================================
+
+        // Current chart data
+        let currentChartData = null;
+
+        // Open chart modal
+        function openChartModal(pair, strikeType) {
+            // Get modal element
+            const modal = document.getElementById('chartModal');
+            if (!modal) {
+                console.error('Chart modal not found');
+                return;
+            }
+            
+            // Show modal
+            modal.classList.add('active');
+            
+            // Prevent body scroll
+            document.body.style.overflow = 'hidden';
+            
+            // Load chart data
+            loadChartData(pair, strikeType);
+        }
+
+        // Close chart modal
+        function closeChartModal(event) {
+            // Check if clicking on overlay (not content)
+            if (event && event.target !== event.currentTarget) {
+                return;
+            }
+            
+            const modal = document.getElementById('chartModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+            
+            // Restore body scroll
+            document.body.style.overflow = '';
+        }
+
+        // Load and display chart data
+        function loadChartData(pair, strikeType) {
+            // Update modal title
+            const titleEl = document.getElementById('modalTitle');
+            if (titleEl) {
+                const strikeNames = {
+                    'put10Delta': '10Δ Put',
+                    'put25Delta': '25Δ Put',
+                    'atmCall': 'ATM Call',
+                    'call25Delta': '25Δ Call',
+                    'call10Delta': '10Δ Call',
+                    'avgPnL': 'Average P&L'
+                };
+                titleEl.textContent = `${pair} - ${strikeNames[strikeType] || strikeType}`;
+            }
+            
+            // Get pair data from stored results
+            const pairData = window.lastPnLResults?.[pair];
+            
+            if (!pairData) {
+                console.error('Pair data not found:', pair);
+                document.getElementById('modalPairInfo').innerHTML = 
+                    '<div style="color: var(--red);">Error: Pair data not found. Please run analysis first.</div>';
+                return;
+            }
+            
+            // Store current data for chart export
+            currentChartData = { pair, strikeType, data: pairData };
+            
+            // Display pair info summary
+            displayPairInfo(pair, pairData);
+            
+            // Generate and display chart
+            generatePnLChart(pair, strikeType, pairData);
+            
+            // Display strike breakdown
+            displayStrikeBreakdown(pair, pairData);
+        }
+
+        // Display pair info summary
+        function displayPairInfo(pair, data) {
+            const infoContainer = document.getElementById('modalPairInfo');
+            if (!infoContainer) return;
+            
+            const volDiffColor = data.volDifference >= 0 ? 'var(--green)' : 'var(--red)';
+            const avgPnLColor = data.avgPnL >= 0 ? 'var(--green)' : 'var(--red)';
+            
+            const html = `
+                <div class="info-item">
+                    <div class="info-label">Pair</div>
+                    <div class="info-value">${pair}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Implied Vol</div>
+                    <div class="info-value">${formatVolDecimal(data.impliedVol)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Realized Vol</div>
+                    <div class="info-value">${formatVolDecimal(data.realizedVol)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Vol Difference</div>
+                    <div class="info-value" style="color: ${volDiffColor};">
+                        ${data.volDifference >= 0 ? '+' : ''}${formatVolDecimal(data.volDifference)}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Average P&L</div>
+                    <div class="info-value" style="color: ${avgPnLColor};">
+                        ${formatPnLRounded(data.avgPnL)}
+                    </div>
+                </div>
+            `;
+            
+            infoContainer.innerHTML = html;
+        }
+
+        // Display strike breakdown table
+        function displayStrikeBreakdown(pair, data) {
+            const container = document.getElementById('strikeBreakdown');
+            if (!container) return;
+            
+            const strikes = data.strikes || {};
+            const strikeOrder = ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'];
+            
+            let html = `
+                <h4 style="margin-bottom: 12px; color: var(--text-white);">Strike Breakdown</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Strike</th>
+                            <th>Strike Price</th>
+                            <th>Final P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            strikeOrder.forEach(strikeName => {
+                const strike = strikes[strikeName];
+                if (strike) {
+                    const pnlColor = strike.finalPnL >= 0 ? 'var(--green)' : 'var(--red)';
+                    html += `
+                        <tr>
+                            <td style="font-weight: 500;">${strikeName}</td>
+                            <td style="font-family: var(--font-mono);">${strike.strikePrice?.toFixed(4) || '—'}</td>
+                            <td style="font-family: var(--font-mono); color: ${pnlColor};">
+                                ${formatPnLRounded(strike.finalPnL)}
+                            </td>
+                        </tr>
+                    `;
+                }
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        // Generate P&L chart using Plotly
+        function generatePnLChart(pair, strikeType, data) {
+            const chartContainer = document.getElementById('chartContainer');
+            if (!chartContainer) return;
+            
+            // Get time series data if available
+            const timestamps = window.lastTimestamps || [];
+            const pnlSeries = data.pnlTimeSeries || {};
+            
+            // Build traces for each strike
+            const traces = [];
+            const colors = {
+                '10Δ Put': '#ef4444',
+                '25Δ Put': '#f97316',
+                'ATM Call': '#eab308',
+                '25Δ Call': '#22c55e',
+                '10Δ Call': '#06b6d4'
+            };
+            
+            const strikeOrder = ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'];
+            
+            strikeOrder.forEach(strikeName => {
+                const series = pnlSeries[strikeName];
+                if (series && series.length > 0) {
+                    traces.push({
+                        x: timestamps.slice(0, series.length),
+                        y: series,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: strikeName,
+                        line: {
+                            color: colors[strikeName],
+                            width: 2
+                        },
+                        hovertemplate: `${strikeName}<br>%{x}<br>P&L: %{y:,.0f}<extra></extra>`
+                    });
+                }
+            });
+            
+            // If no time series data, show a message
+            if (traces.length === 0) {
+                chartContainer.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted);">
+                        <div style="text-align: center;">
+                            <div style="font-size: 48px; margin-bottom: 12px;">📈</div>
+                            <div>Time series data not available for this analysis.</div>
+                            <div style="font-size: 12px; margin-top: 8px;">Run a new analysis to generate P&L evolution charts.</div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const layout = {
+                title: {
+                    text: `${pair} P&L Evolution`,
+                    font: { color: '#ffffff', size: 16 }
+                },
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                font: { color: '#a0a0a0' },
+                xaxis: {
+                    title: 'Time',
+                    gridcolor: '#333333',
+                    zerolinecolor: '#555555'
+                },
+                yaxis: {
+                    title: 'P&L',
+                    gridcolor: '#333333',
+                    zerolinecolor: '#555555',
+                    tickformat: ',.0f'
+                },
+                legend: {
+                    orientation: 'h',
+                    y: -0.15,
+                    font: { color: '#ffffff' }
+                },
+                hovermode: 'x unified',
+                margin: { t: 50, b: 80, l: 80, r: 40 }
+            };
+            
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            };
+            
+            Plotly.newPlot(chartContainer, traces, layout, config);
+        }
+
+        // Export chart as image
+        function exportChart() {
+            const chartContainer = document.getElementById('chartContainer');
+            if (!chartContainer) return;
+            
+            const pair = currentChartData?.pair || 'chart';
+            
+            Plotly.downloadImage(chartContainer, {
+                format: 'png',
+                width: 1200,
+                height: 600,
+                filename: `${pair}_pnl_chart`
+            });
+        }
+
+        // Close modal with Escape key (add to existing keydown handler)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('chartModal');
+                if (modal && modal.classList.contains('active')) {
+                    closeChartModal();
+                }
+            }
+        });
 
         function generateOverviewTab(pairResults, correlationResults) {
             let html = '<h2 style="margin-bottom: 24px;">Analysis Summary</h2>';
@@ -5761,6 +6201,15 @@ Full report in email.
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 10, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
+            // Strike type mapping for onclick
+            const strikeTypeMap = {
+                '10Δ Put': 'put10Delta',
+                '25Δ Put': 'put25Delta',
+                'ATM Call': 'atmCall',
+                '25Δ Call': 'call25Delta',
+                '10Δ Call': 'call10Delta'
+            };
+
             pairs.forEach(([pair, result], idx) => {
                 const rank = startRank + idx;
                 const avgColor = getPnLColor(result.avgPnL * 1000);
@@ -5768,13 +6217,14 @@ Full report in email.
                 html += '<tr>';
                 html += `<td>${rank}</td>`;
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td class="data-table-numbers" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers clickable-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" onclick="openChartModal('${pair}', 'avgPnL')" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
 
                 // Individual strike P&Ls
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
-                    html += `<td class="data-table-numbers" style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
+                    const strikeType = strikeTypeMap[strikeName];
+                    html += `<td class="data-table-numbers clickable-cell" style="background-color: ${color.bg}; color: ${color.text};" onclick="openChartModal('${pair}', '${strikeType}')" title="Click to view chart">${formatThousand(pnl)}</td>`;
                 });
 
                 html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
@@ -5868,17 +6318,27 @@ Full report in email.
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
+            // Strike type mapping for onclick
+            const strikeTypeMap = {
+                '10Δ Put': 'put10Delta',
+                '25Δ Put': 'put25Delta',
+                'ATM Call': 'atmCall',
+                '25Δ Call': 'call25Delta',
+                '10Δ Call': 'call10Delta'
+            };
+
             pairs.forEach(([pair, result]) => {
                 const avgColor = getPnLColor(result.avgPnL * 1000);
 
                 html += '<tr>';
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td class="data-table-numbers" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers clickable-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" onclick="openChartModal('${pair}', 'avgPnL')" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
-                    html += `<td class="data-table-numbers" style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
+                    const strikeType = strikeTypeMap[strikeName];
+                    html += `<td class="data-table-numbers clickable-cell" style="background-color: ${color.bg}; color: ${color.text};" onclick="openChartModal('${pair}', '${strikeType}')" title="Click to view chart">${formatThousand(pnl)}</td>`;
                 });
 
                 html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
@@ -5905,17 +6365,27 @@ Full report in email.
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
+            // Strike type mapping for onclick
+            const strikeTypeMap = {
+                '10Δ Put': 'put10Delta',
+                '25Δ Put': 'put25Delta',
+                'ATM Call': 'atmCall',
+                '25Δ Call': 'call25Delta',
+                '10Δ Call': 'call10Delta'
+            };
+
             pairs.forEach(([pair, result]) => {
                 const avgColor = getPnLColor(result.avgPnL * 1000);
 
                 html += '<tr>';
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td class="data-table-numbers" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers clickable-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" onclick="openChartModal('${pair}', 'avgPnL')" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
-                    html += `<td class="data-table-numbers" style="background-color: ${color.bg}; color: ${color.text};">${formatThousand(pnl)}</td>`;
+                    const strikeType = strikeTypeMap[strikeName];
+                    html += `<td class="data-table-numbers clickable-cell" style="background-color: ${color.bg}; color: ${color.text};" onclick="openChartModal('${pair}', '${strikeType}')" title="Click to view chart">${formatThousand(pnl)}</td>`;
                 });
 
                 html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
@@ -7541,6 +8011,36 @@ Full report in email.
             </div>
             <div class="chart-stats" id="chartStats">
                 <!-- Stats will be populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart Modal -->
+    <div id="chartModal" class="modal-overlay" onclick="closeChartModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modalTitle">Pair P&L Analysis</h3>
+                <button class="modal-close" onclick="closeChartModal()">×</button>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Pair info -->
+                <div id="modalPairInfo" class="pair-info-summary"></div>
+                
+                <!-- Chart container -->
+                <div id="chartContainer" style="width: 100%; height: 500px;"></div>
+                
+                <!-- Strike breakdown -->
+                <div id="strikeBreakdown" class="strike-breakdown-table"></div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="exportChart()">
+                    📊 Export Chart as Image
+                </button>
+                <button class="btn btn-secondary" onclick="closeChartModal()">
+                    Close
+                </button>
             </div>
         </div>
     </div>
