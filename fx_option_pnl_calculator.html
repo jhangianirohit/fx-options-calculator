@@ -5435,7 +5435,9 @@ Full report in email.
             const infoContainer = document.getElementById('modalPairInfo');
             if (!infoContainer) return;
             
-            const volDiffColor = data.volDifference >= 0 ? 'var(--green)' : 'var(--red)';
+            // Use volDiff (the actual property name in the data object)
+            const volDiff = data.volDiff || 0;
+            const volDiffColor = volDiff >= 0 ? 'var(--green)' : 'var(--red)';
             const avgPnLColor = data.avgPnL >= 0 ? 'var(--green)' : 'var(--red)';
             
             const html = `
@@ -5454,7 +5456,7 @@ Full report in email.
                 <div class="info-item">
                     <div class="info-label">Vol Difference</div>
                     <div class="info-value" style="color: ${volDiffColor};">
-                        ${data.volDifference >= 0 ? '+' : ''}${formatVolDecimal(data.volDifference)}
+                        ${volDiff >= 0 ? '+' : ''}${formatVolDecimal(volDiff)}
                     </div>
                 </div>
                 <div class="info-item">
