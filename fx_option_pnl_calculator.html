@@ -491,6 +491,15 @@ tfoot td {
     margin-bottom: 10px;
 }
 
+.summary-block p,
+.summary-block div,
+.summary-block span,
+.overall-summary p,
+.overall-summary div,
+.overall-summary span {
+    color: var(--text-white);
+}
+
 .summary-bar {
     display: flex;
     gap: 20px;
@@ -521,13 +530,23 @@ tfoot td {
 .alert {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
+    border-left: 3px solid var(--cyan);
     border-radius: 4px;
     padding: 12px 16px;
     margin-bottom: 16px;
 }
 
+.info-box,
+.info-box p,
+.info-box div,
+.info-box span,
+.info-box strong {
+    color: var(--text-white) !important;
+}
+
 .alert-warning {
     border-color: var(--red);
+    border-left-color: var(--red);
 }
 
 .alert-info {
@@ -720,6 +739,62 @@ details > div {
 .mb-1 { margin-bottom: 8px; }
 .mb-2 { margin-bottom: 16px; }
 
+/* ============================================
+   CONTRAST FIX - Readable Text on All Backgrounds
+   ============================================ */
+
+/* Force dark text on light/colored backgrounds */
+[style*="background-color: rgb(6, 182, 212)"],
+[style*="background-color: #06b6d4"],
+[style*="background: #06b6d4"],
+[style*="background-color: cyan"],
+[style*="background: cyan"],
+[style*="background-color: rgb(34, 197, 94)"],
+[style*="background-color: #22c55e"],
+[style*="background: #22c55e"],
+[style*="background-color: green"],
+[style*="background-color: rgb(255, 255, 255)"],
+[style*="background-color: #ffffff"],
+[style*="background-color: white"],
+[style*="background: white"],
+[style*="background-color: #e8f4f8"],
+[style*="background: #e8f4f8"],
+[style*="background-color: #f"],
+[style*="background: #f"],
+[style*="background-color: #e"] {
+    background: var(--bg-elevated) !important;
+    color: var(--text-white) !important;
+}
+
+/* Override light blue backgrounds completely */
+[style*="background-color: #e8"],
+[style*="background: #e8"],
+[style*="background-color: #d8"],
+[style*="background: #d8"],
+[style*="background-color: rgb(232"],
+[style*="background: rgb(232"],
+[style*="background-color: rgb(216"],
+[style*="background: rgb(216"] {
+    background: var(--bg-elevated) !important;
+    color: var(--text-white) !important;
+}
+
+/* Override old blue border colors */
+[style*="border-left: 3px solid #007bff"],
+[style*="border-left: 3px solid rgb(0, 123, 255)"] {
+    border-left: 3px solid var(--cyan) !important;
+}
+
+/* Ensure all box contents are readable */
+#windowPreview,
+#windowPreview *,
+.window-preview,
+.window-preview *,
+.analysis-window,
+.analysis-window * {
+    color: var(--text-white) !important;
+}
+
     </style>
 </head>
 <body>
@@ -815,12 +890,12 @@ details > div {
                     </label>
                 </div>
             </div>
-            <div class="input-group" id="expiryCalculations" style="display: none; margin-top: 10px; padding: 10px; background-color: #f0f8ff; border-left: 3px solid #007bff; border-radius: 4px;">
-                <div style="font-size: 14px; color: #555;">
+            <div class="info-box" id="expiryCalculations" style="display: none; margin-top: 10px;">
+                <div>
                     <strong>Calculated:</strong><br>
                     <span id="spotSeriesLengthDisplay" style="margin-left: 10px;">• Spot Series Length: -- hours</span><br>
                     <span id="timeRemainingDisplay" style="margin-left: 10px;">• Time Remaining at End: -- hours</span><br>
-                    <span id="expiryWarning" style="margin-left: 10px; color: #ff6600; font-weight: bold;"></span>
+                    <span id="expiryWarning" style="margin-left: 10px; color: var(--red); font-weight: bold;"></span>
                 </div>
             </div>
         </div>
@@ -844,7 +919,7 @@ details > div {
                 </div>
                 <div style="margin-top: 10px;">
                     <button class="secondary" onclick="addCustomStrike()" id="addCustomStrikeBtn">Add Custom Strike</button>
-                    <span id="customStrikeCount" style="margin-left: 10px; color: #666;">Custom Strikes: 0/5</span>
+                    <span id="customStrikeCount" style="margin-left: 10px; color: var(--text-secondary);">Custom Strikes: 0/5</span>
                 </div>
             </div>
         </div>
@@ -999,7 +1074,7 @@ details > div {
                             </tr>
                         </table>
 
-                        <div id="windowPreview" style="margin-top: 15px; padding: 10px; background-color: #e8f4f8; border-left: 3px solid #007bff; border-radius: 4px; font-size: 14px;">
+                        <div id="windowPreview" class="info-box">
                             <!-- Preview will be populated here -->
                         </div>
                     </div>
@@ -1066,10 +1141,10 @@ details > div {
                 <div id="batchResultsContent">
                 <!-- Top 5 / Bottom 5 Rankings -->
                 <div id="rankingsSection">
-                    <h3 style="text-align: center; background-color: #007bff; color: white; padding: 15px; border-radius: 8px; margin-top: 30px;">TOP 5 PERFORMERS</h3>
+                    <h3 class="currency-header" style="text-align: center; margin-top: 20px;">🏆 TOP 5 PERFORMERS</h3>
                     <div id="top5Table"></div>
 
-                    <h3 style="text-align: center; background-color: #dc3545; color: white; padding: 15px; border-radius: 8px; margin-top: 30px;">BOTTOM 5 PERFORMERS</h3>
+                    <h3 class="currency-header" style="text-align: center; margin-top: 20px; border-left: 3px solid var(--red);">📉 BOTTOM 5 PERFORMERS</h3>
                     <div id="bottom5Table"></div>
                 </div>
 
@@ -2465,12 +2540,12 @@ details > div {
 
                 // Validate
                 if (startDateTime >= endDateTime) {
-                    previewDiv.innerHTML = '<strong style="color: #dc3545;">Error: Start must be before End</strong>';
+                    previewDiv.innerHTML = '<strong style="color: var(--red);">Error: Start must be before End</strong>';
                     return;
                 }
 
                 if (startDateTime < batchData.fullDataRange.start || endDateTime > batchData.fullDataRange.end) {
-                    previewDiv.innerHTML = '<strong style="color: #dc3545;">Error: Window must be within data range</strong>';
+                    previewDiv.innerHTML = '<strong style="color: var(--red);">Error: Window must be within data range</strong>';
                     return;
                 }
 
@@ -4284,12 +4359,12 @@ Full report in email.
 
             html += `
             <div class="card">
-                <h3 style="text-align: center; background-color: #007bff; color: white; padding: 15px; border-radius: 8px; margin-top: 30px;">TOP 5 PERFORMERS</h3>
+                <h3 class="currency-header" style="text-align: center;">🏆 TOP 5 PERFORMERS</h3>
                 ${generateRankingTable(top5, 1)}
             </div>
 
             <div class="card">
-                <h3 style="text-align: center; background-color: #dc3545; color: white; padding: 15px; border-radius: 8px; margin-top: 30px;">BOTTOM 5 PERFORMERS</h3>
+                <h3 class="currency-header" style="text-align: center; border-left: 3px solid var(--red);">📉 BOTTOM 5 PERFORMERS</h3>
                 ${generateRankingTable(bottom5, bottom5StartRank)}
             </div>`;
 
@@ -4322,9 +4397,9 @@ Full report in email.
                 const currencyName = getCurrencyName(currency);
 
                 html += `<div class="currency-group-section">`;
-                html += `<h3 style="text-align: center; background-color: #007bff; color: white; padding: 10px; border-radius: 4px;">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
+                html += `<h3 class="currency-header">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
                 html += generateCurrencyGroupTable(pairsWithResults);
-                html += `<div style="margin-top: 10px; font-weight: bold; font-size: 16px;">Group Average: ${formatThousand(groupAvg)}</div>`;
+                html += `<div class="summary-block" style="margin-top: 12px;"><strong>Group Average:</strong> <span style="font-family: var(--font-mono);">${formatThousand(groupAvg)}</span></div>`;
                 html += `</div>`;
             });
             html += '</div>';
@@ -4707,9 +4782,9 @@ Full report in email.
                 const currencyName = getCurrencyName(currency);
 
                 html += `<div class="currency-group-section">`;
-                html += `<h3 style="text-align: center; background-color: #007bff; color: white; padding: 10px; border-radius: 4px;">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
+                html += `<h3 class="currency-header">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
                 html += generateCurrencyGroupTable(pairsWithResults);
-                html += `<div style="margin-top: 10px; font-weight: bold; font-size: 16px;">Group Average: ${formatThousand(groupAvg)}</div>`;
+                html += `<div class="summary-block" style="margin-top: 12px;"><strong>Group Average:</strong> <span style="font-family: var(--font-mono);">${formatThousand(groupAvg)}</span></div>`;
                 html += `</div>`;
             });
 
@@ -5926,7 +6001,7 @@ Full report in email.
                 console.log(`  Building table for strike ${idx + 1}: ${strikeData.name}`);
                 const numRows = strikeData.results.length;
                 resultsHTML += `<div class="strike-section">`;
-                const headerStyle = strikeData.isCustom ? 'style="color: #007bff; font-weight: bold;"' : '';
+                const headerStyle = strikeData.isCustom ? 'style="color: var(--cyan); font-weight: bold;"' : '';
                 resultsHTML += `<div class="strike-header" ${headerStyle}>Strike: ${formatNumber(strikeData.strike)} (${strikeData.name}) - ${numRows} Rows (Hedge Times + Final)</div>`;
 
                 // Verification at t=0
