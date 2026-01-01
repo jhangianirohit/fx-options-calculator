@@ -871,6 +871,42 @@ tbody td.sorted-column {
     background: inherit !important;
 }
 
+/* ============================================
+   FIX: Remove Bold from Numbers in Tables
+   ============================================ */
+
+/* Ensure numbers are NOT bold - normal weight */
+.data-table-numbers,
+td.data-table-numbers,
+.pair-details td,
+.strike-summary td,
+.expandable-pair td,
+.expanded-pair td {
+    font-weight: 400 !important;
+}
+
+/* Only pair names (first column) should be bold */
+td:first-child {
+    font-weight: 600;
+}
+
+/* Override any bold styling on numeric cells */
+td:not(:first-child) {
+    font-weight: 400;
+}
+
+/* Specific override for expanded pair details */
+.pair-details td,
+.strike-breakdown td,
+[class*="pair-detail"] td {
+    font-weight: 400 !important;
+}
+
+/* Only headers should be bold */
+th {
+    font-weight: 600;
+}
+
 
 /* Utility Classes */
 .text-center { text-align: center; }
@@ -3159,44 +3195,44 @@ tbody td.sorted-column {
             let color;
             
             if (value < mid) {
-                // Negative range: Deep Red → Red → Yellow/Orange
+                // Negative range: Dark Red → Red → Muted Orange
                 ratio = (value - min) / (mid - min);
                 ratio = Math.max(0, Math.min(1, ratio));
                 
                 if (ratio < 0.5) {
-                    // Deep red to red (worst to bad)
+                    // Deep red to bright red (worst to bad)
                     const t = ratio * 2;
-                    const r = Math.round(139 + (220 - 139) * t);
-                    const g = Math.round(0 + (38 - 0) * t);
-                    const b = Math.round(0 + (38 - 0) * t);
+                    const r = Math.round(139 + (239 - 139) * t);
+                    const g = Math.round(0 + (68 - 0) * t);
+                    const b = Math.round(0 + (68 - 0) * t);
                     color = { r, g, b };
                 } else {
-                    // Red to yellow/orange (bad to neutral)
+                    // Bright red to muted orange (bad to neutral)
                     const t = (ratio - 0.5) * 2;
-                    const r = Math.round(220 + (218 - 220) * t);
-                    const g = Math.round(38 + (165 - 38) * t);
-                    const b = Math.round(38 + (32 - 38) * t);
+                    const r = Math.round(239 + (156 - 239) * t);
+                    const g = Math.round(68 + (108 - 68) * t);
+                    const b = Math.round(68 + (84 - 68) * t);
                     color = { r, g, b };
                 }
                 
             } else {
-                // Positive range: Yellow → Light Green → Dark Green
+                // Positive range: Muted Orange → Teal → Dark Green
                 ratio = (value - mid) / (max - mid);
                 ratio = Math.max(0, Math.min(1, ratio));
                 
                 if (ratio < 0.5) {
-                    // Yellow to light green (neutral to good)
+                    // Muted orange to teal (neutral to good)
                     const t = ratio * 2;
-                    const r = Math.round(218 + (132 - 218) * t);
-                    const g = Math.round(165 + (204 - 165) * t);
-                    const b = Math.round(32 + (22 - 32) * t);
+                    const r = Math.round(156 + (94 - 156) * t);
+                    const g = Math.round(108 + (164 - 108) * t);
+                    const b = Math.round(84 + (140 - 84) * t);
                     color = { r, g, b };
                 } else {
-                    // Light green to dark green (good to best)
+                    // Teal to dark green (good to best)
                     const t = (ratio - 0.5) * 2;
-                    const r = Math.round(132 + (34 - 132) * t);
-                    const g = Math.round(204 + (197 - 204) * t);
-                    const b = Math.round(22 + (94 - 22) * t);
+                    const r = Math.round(94 + (22 - 94) * t);
+                    const g = Math.round(164 + (163 - 164) * t);
+                    const b = Math.round(140 + (74 - 140) * t);
                     color = { r, g, b };
                 }
             }
@@ -3228,8 +3264,8 @@ tbody td.sorted-column {
             // Calculate perceived luminance
             const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
             
-            // Use black text on bright backgrounds, white on dark
-            return luminance > 140 ? '#000000' : '#ffffff';
+            // Threshold adjusted for new muted color palette
+            return luminance > 130 ? '#000000' : '#ffffff';
         }
 
         function interpolateColor(color1Hex, color2Hex, factor) {
