@@ -730,6 +730,103 @@ details > div {
     transition: width 0.3s ease;
 }
 
+/* Batch Analysis Tabs */
+.batch-tabs-container {
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    border-radius: 4px 4px 0 0;
+}
+
+.batch-tabs {
+    display: flex;
+    gap: 0;
+}
+
+.batch-tab {
+    padding: 14px 28px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.batch-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.batch-tab.active {
+    color: var(--text-white);
+    border-bottom-color: var(--cyan);
+    background: var(--bg-main);
+}
+
+/* Tab Panels */
+.batch-tab-panel {
+    display: none;
+    padding-top: 20px;
+}
+
+.batch-tab-panel.active {
+    display: block;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Summary Sections in Overview */
+.summary-section {
+    margin-bottom: 32px;
+}
+
+.summary-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-white);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Export Section */
+.export-section {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Charts Placeholder */
+.charts-placeholder {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 60px 40px;
+    text-align: center;
+}
+
+.charts-placeholder p {
+    color: var(--text-secondary);
+    font-size: 16px;
+}
+
 /* Utility Classes */
 .text-center { text-align: center; }
 .text-right { text-align: right; }
@@ -4076,19 +4173,20 @@ ${generateExpandableFullResults(window.batchAnalysisResults, window.correlationA
                     })
                 ]);
 
-                document.getElementById('exportStatus').innerHTML = 
-                    '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
-                document.getElementById('exportStatus').style.color = '#059669';
-
-                setTimeout(() => {
-                    document.getElementById('exportStatus').innerHTML = '';
-                }, 5000);
+                const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('exportStatus');
+                if (statusEl) {
+                    statusEl.innerHTML = '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
+                    statusEl.style.color = 'var(--green)';
+                    setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
+                }
 
             } catch (error) {
                 console.error('Copy failed:', error);
-                document.getElementById('exportStatus').innerHTML = 
-                    '✗ Copy failed. Please try again or use a different browser.';
-                document.getElementById('exportStatus').style.color = '#dc2626';
+                const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('exportStatus');
+                if (statusEl) {
+                    statusEl.innerHTML = '✗ Copy failed. Please try again or use a different browser.';
+                    statusEl.style.color = 'var(--red)';
+                }
             }
         }
 
@@ -4223,19 +4321,20 @@ Full report in email.
 
                 await navigator.clipboard.writeText(bbgText);
 
-                document.getElementById('exportStatus').innerHTML = 
-                    '✓ Bloomberg chat copied! Paste into terminal.';
-                document.getElementById('exportStatus').style.color = '#059669';
-
-                setTimeout(() => {
-                    document.getElementById('exportStatus').innerHTML = '';
-                }, 5000);
+                const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('exportStatus');
+                if (statusEl) {
+                    statusEl.innerHTML = '✓ Bloomberg chat copied! Paste into terminal.';
+                    statusEl.style.color = 'var(--green)';
+                    setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
+                }
 
             } catch (error) {
                 console.error('Copy failed:', error);
-                document.getElementById('exportStatus').innerHTML = 
-                    '✗ Copy failed. Please try again.';
-                document.getElementById('exportStatus').style.color = '#dc2626';
+                const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('exportStatus');
+                if (statusEl) {
+                    statusEl.innerHTML = '✗ Copy failed. Please try again.';
+                    statusEl.style.color = 'var(--red)';
+                }
             }
         }
 
@@ -4293,29 +4392,45 @@ Full report in email.
                 .filter(([_, result]) => !result.error)
                 .sort((a, b) => b[1].avgPnL - a[1].avgPnL);
 
-            // Generate P&L results HTML
-            const pnlHTML = generatePnLResults(pairResults);
-
-            // Generate correlation results HTML
-            const corrHTML = generateCorrelationResults(correlationResults);
+            // Generate content for each tab
+            const overviewHTML = generateOverviewTab(pairResults, correlationResults);
+            const pnlHTML = generatePnLTab(pairResults);
+            const corrHTML = generateCorrelationTab(correlationResults);
+            const chartsHTML = generateChartsTab();
 
             // Build tabbed interface
             let html = `
-                <div class="results-tabs">
-                    <button class="tab-button active" onclick="switchResultsTab('pnl')">
-                        P&L Analysis
-                    </button>
-                    <button class="tab-button" onclick="switchResultsTab('correlation')">
-                        Correlation Analysis
-                    </button>
+                <div class="batch-tabs-container">
+                    <div class="batch-tabs">
+                        <button class="batch-tab active" data-tab="overview" onclick="switchBatchTab('overview')">
+                            📊 Overview
+                        </button>
+                        <button class="batch-tab" data-tab="pnl" onclick="switchBatchTab('pnl')">
+                            💰 P&L Analysis
+                        </button>
+                        <button class="batch-tab" data-tab="correlation" onclick="switchBatchTab('correlation')">
+                            🔗 Correlation
+                        </button>
+                        <button class="batch-tab" data-tab="charts" onclick="switchBatchTab('charts')">
+                            📈 Charts
+                        </button>
+                    </div>
                 </div>
 
-                <div id="pnlTab" class="results-tab-content active">
+                <div id="tab-overview" class="batch-tab-panel active">
+                    ${overviewHTML}
+                </div>
+
+                <div id="tab-pnl" class="batch-tab-panel">
                     ${pnlHTML}
                 </div>
 
-                <div id="correlationTab" class="results-tab-content">
+                <div id="tab-correlation" class="batch-tab-panel">
                     ${corrHTML}
+                </div>
+
+                <div id="tab-charts" class="batch-tab-panel">
+                    ${chartsHTML}
                 </div>
             `;
 
@@ -4328,25 +4443,254 @@ Full report in email.
                 document.getElementById('batchResults').innerHTML = html;
             }
             
-            // Show export buttons
+            // Hide old export buttons (now in Overview tab)
             const exportButtons = document.getElementById('exportButtons');
             if (exportButtons) {
-                exportButtons.style.display = 'block';
+                exportButtons.style.display = 'none';
             }
         }
 
-        function switchResultsTab(tabName) {
-            // Update tab buttons
-            document.querySelectorAll('.results-tabs .tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
+        // Current active batch tab
+        let currentBatchTab = 'overview';
 
-            // Update tab content
-            document.querySelectorAll('.results-tab-content').forEach(content => {
-                content.classList.remove('active');
+        function switchBatchTab(tabName) {
+            currentBatchTab = tabName;
+            
+            // Hide all tab panels
+            document.querySelectorAll('.batch-tab-panel').forEach(panel => {
+                panel.classList.remove('active');
             });
-            document.getElementById(tabName + 'Tab').classList.add('active');
+            
+            // Show selected tab panel
+            const selectedPanel = document.getElementById('tab-' + tabName);
+            if (selectedPanel) {
+                selectedPanel.classList.add('active');
+            }
+            
+            // Update tab button states
+            document.querySelectorAll('.batch-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            const selectedTab = document.querySelector('.batch-tab[data-tab="' + tabName + '"]');
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+        }
+
+        function generateOverviewTab(pairResults, correlationResults) {
+            let html = '<h2 style="margin-bottom: 24px;">Analysis Summary</h2>';
+            
+            // Analysis info box
+            const analysisData = window.currentAnalysisData || batchData;
+            const pairCount = pairResults.length;
+            const startTime = analysisData.timestamps?.[0] ? new Date(analysisData.timestamps[0]).toLocaleString() : 'N/A';
+            const endTime = analysisData.timestamps?.[analysisData.timestamps.length - 1] ? new Date(analysisData.timestamps[analysisData.timestamps.length - 1]).toLocaleString() : 'N/A';
+            
+            html += `
+                <div class="info-box" style="margin-bottom: 24px;">
+                    <p><strong>Pairs Analyzed:</strong> ${pairCount}</p>
+                    <p><strong>Period:</strong> ${startTime} → ${endTime}</p>
+                    <p><strong>Rebalancing:</strong> ${window.analysisConfig?.rebalancingFrequency || 'Hourly'}</p>
+                    <p><strong>Option Expiry:</strong> ${window.analysisConfig?.optionExpiry || 'Full period'}</p>
+                </div>
+            `;
+            
+            // Top 5 Vol Performers
+            const top5Vol = pairResults.slice(0, 5);
+            html += `
+                <div class="summary-section">
+                    <h3>🏆 Top 5 P&L Performers</h3>
+                    ${generateRankingTable(top5Vol, 1)}
+                </div>
+            `;
+            
+            // Bottom 5 Vol Performers
+            const bottom5Vol = pairResults.slice(-5).reverse();
+            const bottom5StartRank = Math.max(1, pairResults.length - bottom5Vol.length + 1);
+            html += `
+                <div class="summary-section">
+                    <h3>📉 Bottom 5 P&L Performers</h3>
+                    ${generateRankingTable(bottom5Vol, bottom5StartRank)}
+                </div>
+            `;
+            
+            // Top 5 Correlations (if available)
+            if (correlationResults && Object.keys(correlationResults).length > 0) {
+                const allCorrelations = [];
+                Object.entries(correlationResults).forEach(([currency, data]) => {
+                    if (data.correlations) {
+                        data.correlations.forEach(corr => {
+                            allCorrelations.push({
+                                currency,
+                                ...corr,
+                                diff: (corr.realizedCorr || 0) - (corr.impliedCorr || 0)
+                            });
+                        });
+                    }
+                });
+                
+                const sortedCorr = allCorrelations.sort((a, b) => b.diff - a.diff);
+                const top5Corr = sortedCorr.slice(0, 5);
+                const bottom5Corr = sortedCorr.slice(-5).reverse();
+                
+                if (top5Corr.length > 0) {
+                    html += `
+                        <div class="summary-section">
+                            <h3>🔗 Top 5 Correlation Performers</h3>
+                            ${generateCorrRankingTable(top5Corr, 1)}
+                        </div>
+                    `;
+                }
+                
+                if (bottom5Corr.length > 0) {
+                    html += `
+                        <div class="summary-section">
+                            <h3>📊 Bottom 5 Correlation Performers</h3>
+                            ${generateCorrRankingTable(bottom5Corr, sortedCorr.length - 4)}
+                        </div>
+                    `;
+                }
+            }
+            
+            // Export buttons
+            html += `
+                <div class="export-section">
+                    <button class="btn btn-primary" onclick="copyEmailReport()">
+                        📋 Copy Email Report
+                    </button>
+                    <button class="btn btn-secondary" onclick="copyBloombergChat()">
+                        💬 Copy Bloomberg Chat
+                    </button>
+                    <div id="exportStatusOverview" style="margin-left: 12px; font-size: 13px; color: var(--green);"></div>
+                </div>
+            `;
+            
+            return html;
+        }
+
+        function generateCorrRankingTable(correlations, startRank) {
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>Rank</th><th>Currency</th><th>Pair 1</th><th>Pair 2</th>';
+            html += '<th class="numeric-header">Impl Corr</th><th class="numeric-header">Real Corr</th><th class="numeric-header">Diff</th>';
+            html += '</tr></thead><tbody>';
+            
+            correlations.forEach((corr, i) => {
+                const diff = corr.diff;
+                const diffColor = diff > 0 ? 'var(--green)' : diff < 0 ? 'var(--red)' : 'var(--text-secondary)';
+                html += `<tr>
+                    <td>${startRank + i}</td>
+                    <td>${corr.currency}</td>
+                    <td style="font-family: var(--font-mono);">${corr.pair1}</td>
+                    <td style="font-family: var(--font-mono);">${corr.pair2}</td>
+                    <td class="data-table-numbers">${Math.round((corr.impliedCorr || 0) * 100)}%</td>
+                    <td class="data-table-numbers">${Math.round((corr.realizedCorr || 0) * 100)}%</td>
+                    <td class="data-table-numbers" style="color: ${diffColor}; font-weight: 600;">
+                        ${diff >= 0 ? '+' : ''}${Math.round(diff * 100)}%
+                    </td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function generatePnLTab(pairResults) {
+            let html = '<h2 style="margin-bottom: 24px;">P&L Analysis by Currency</h2>';
+            
+            // Currency Groups
+            const analyzedPairs = [...new Set(pairResults.map(([pair, _]) => pair))];
+            const currencyBlocks = buildCurrencyBlocksFromResults(analyzedPairs, batchData.currencies || []);
+            const sortedCurrencies = sortCurrencies(Object.keys(currencyBlocks));
+
+            sortedCurrencies.forEach(currency => {
+                const pairsInBlock = currencyBlocks[currency];
+                const pairsWithResults = pairsInBlock
+                    .map(pair => {
+                        const result = pairResults.find(([p, _]) => p === pair);
+                        return result ? [pair, result[1]] : null;
+                    })
+                    .filter(r => r !== null);
+
+                if (pairsWithResults.length === 0) return;
+
+                const groupAvg = pairsWithResults.reduce((sum, [_, result]) => sum + result.avgPnL, 0) / pairsWithResults.length;
+                const currencyName = getCurrencyName(currency);
+
+                html += `<div class="currency-group-section">`;
+                html += `<h3 class="currency-header">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
+                html += generateCurrencyGroupTable(pairsWithResults);
+                html += `<div class="summary-block" style="margin-top: 12px;"><strong>Group Average:</strong> <span style="font-family: var(--font-mono);">${formatThousand(groupAvg)}</span></div>`;
+                html += `</div>`;
+            });
+
+            // Expandable Details
+            html += '<h2 style="margin-top: 32px; margin-bottom: 24px;">Pair Details (Click to Expand)</h2>';
+            pairResults.forEach(([pair, result]) => {
+                const avgColor = getPnLColor(result.avgPnL * 1000);
+                html += `<div class="expandable-pair">`;
+                html += `<div class="pair-header" onclick="togglePairDetails('${pair}')">`;
+                html += `<span style="font-weight: bold; font-size: 16px;">▶ ${pair}</span>`;
+                html += `<span style="background-color: ${avgColor.bg}; color: ${avgColor.text}; padding: 5px 10px; border-radius: 4px; font-weight: bold;">Avg P&L: ${formatThousand(result.avgPnL)}</span>`;
+                html += `</div>`;
+                html += `<div class="pair-details" id="details-${pair}">`;
+
+                // Strike P&L Summary Table
+                html += '<h4>Strike P&L Summary:</h4>';
+                html += '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th></th>';
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    const strikePrice = result.strikes[strikeName].strikePrice;
+                    html += `<th>${strikePrice.toFixed(4)}</th>`;
+                });
+                html += '</tr></thead><tbody><tr><td><strong>Strike</strong></td>';
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    html += `<td>${strikeName}</td>`;
+                });
+                html += '</tr><tr><td><strong>P&L (k)</strong></td>';
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    const pnl = result.strikes[strikeName].finalPnL;
+                    const color = getPnLColor(pnl);
+                    html += `<td style="background-color: ${color.bg}; color: ${color.text}; font-weight: bold;">${formatThousand(pnl)}</td>`;
+                });
+                html += '</tr></tbody></table>';
+
+                // Summary stats
+                html += `<div class="info-box" style="margin-top: 15px;">`;
+                html += `<strong>Summary:</strong> `;
+                html += `Implied Vol: ${(result.impliedVol * 100).toFixed(2)}% | `;
+                html += `Realized Vol: ${(result.realizedVol * 100).toFixed(2)}% | `;
+                html += `Vol Diff: ${((result.realizedVol - result.impliedVol) * 100).toFixed(2)}%`;
+                html += `</div>`;
+
+                html += `</div></div>`;
+            });
+
+            return html;
+        }
+
+        function generateCorrelationTab(correlationResults) {
+            let html = '<h2 style="margin-bottom: 24px;">Correlation Analysis by Currency</h2>';
+            
+            if (!correlationResults || Object.keys(correlationResults).length === 0) {
+                html += '<div class="info-box"><p>No correlation data available. Enable correlation analysis in settings.</p></div>';
+                return html;
+            }
+            
+            html += generateCorrelationResults(correlationResults);
+            return html;
+        }
+
+        function generateChartsTab() {
+            return `
+                <h2 style="margin-bottom: 24px;">Charts & Visualizations</h2>
+                <div class="charts-placeholder">
+                    <p style="font-size: 48px; margin-bottom: 16px;">📈</p>
+                    <p>Interactive charts will be added in Phase 3</p>
+                    <p style="color: var(--text-muted); margin-top: 8px;">
+                        Planned: Vol comparison charts, P&L distribution, Correlation heatmaps
+                    </p>
+                </div>
+            `;
         }
 
         function generatePnLResults(pairResults) {
