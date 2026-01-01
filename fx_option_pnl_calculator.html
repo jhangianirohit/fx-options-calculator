@@ -1037,15 +1037,20 @@ details > div {
     border-bottom: 1px solid var(--border-subtle);
 }
 
-/* Chart-enabled cells - using data attributes */
+/* Chart-enabled cells - CSP-safe with data attributes */
 .chart-cell {
     cursor: pointer;
     position: relative;
-    transition: box-shadow 0.15s ease;
+    transition: box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 .chart-cell:hover {
-    box-shadow: inset 0 0 0 2px var(--cyan);
+    box-shadow: 0 0 0 2px var(--cyan);
+    z-index: 10;
+}
+
+.chart-cell:active {
+    transform: scale(0.98);
 }
 
 .batch-tab {
@@ -5561,29 +5566,68 @@ Full report in email.
             });
         }
 
+        // ============================================
+        // CSP-SAFE EVENT LISTENERS (no inline handlers)
+        // ============================================
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Modal close button (X)
+            const closeBtn = document.getElementById('modalCloseBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function() {
+                    closeChartModal();
+                });
+            }
+            
+            // Modal close button (footer)
+            const closeBtnFooter = document.getElementById('modalCloseBtnFooter');
+            if (closeBtnFooter) {
+                closeBtnFooter.addEventListener('click', function() {
+                    closeChartModal();
+                });
+            }
+            
+            // Export chart button
+            const exportBtn = document.getElementById('exportChartBtn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    exportChart();
+                });
+            }
+            
+            // Modal overlay click to close
+            const modal = document.getElementById('chartModal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    // Only close if clicking the overlay, not the content
+                    if (e.target === modal) {
+                        closeChartModal();
+                    }
+                });
+            }
+            
+            // Event delegation for chart cell clicks
+            document.body.addEventListener('click', function(e) {
+                const cell = e.target.closest('.chart-cell');
+                
+                if (cell) {
+                    const pair = cell.getAttribute('data-pair');
+                    const strike = cell.getAttribute('data-strike');
+                    
+                    if (pair && strike) {
+                        console.log('Opening chart for:', pair, strike);
+                        openChartModal(pair, strike);
+                    }
+                }
+            });
+        });
+
         // Close modal with Escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 const modal = document.getElementById('chartModal');
                 if (modal && modal.classList.contains('active')) {
                     closeChartModal();
-                }
-            }
-        });
-
-        // Event delegation for chart cell clicks (safer than inline onclick)
-        document.addEventListener('click', function(e) {
-            // Find the clicked cell with chart data attributes
-            const cell = e.target.closest('td[data-chart-pair]');
-            
-            if (cell) {
-                const pair = cell.getAttribute('data-chart-pair');
-                const strikeType = cell.getAttribute('data-strike-type');
-                
-                if (pair && strikeType) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openChartModal(pair, strikeType);
                 }
             }
         });
@@ -6232,14 +6276,14 @@ Full report in email.
                 html += '<tr>';
                 html += `<td>${rank}</td>`;
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td class="data-table-numbers chart-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" data-chart-pair="${pair}" data-strike-type="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers chart-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
 
                 // Individual strike P&Ls
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
                     const strikeType = strikeTypeMap[strikeName];
-                    html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-chart-pair="${pair}" data-strike-type="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
+                    html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
                 });
 
                 html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
@@ -6347,13 +6391,13 @@ Full report in email.
 
                 html += '<tr>';
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td class="data-table-numbers chart-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" data-chart-pair="${pair}" data-strike-type="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers chart-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
                     const strikeType = strikeTypeMap[strikeName];
-                    html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-chart-pair="${pair}" data-strike-type="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
+                    html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
                 });
 
                 html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
@@ -6394,13 +6438,13 @@ Full report in email.
 
                 html += '<tr>';
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td class="data-table-numbers chart-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" data-chart-pair="${pair}" data-strike-type="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td class="data-table-numbers chart-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
                     const strikeType = strikeTypeMap[strikeName];
-                    html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-chart-pair="${pair}" data-strike-type="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
+                    html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
                 });
 
                 html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
@@ -8030,12 +8074,12 @@ Full report in email.
         </div>
     </div>
 
-    <!-- Chart Modal -->
-    <div id="chartModal" class="modal-overlay" onclick="closeChartModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
+    <!-- Chart Modal (CSP-safe: no inline handlers) -->
+    <div id="chartModal" class="modal-overlay">
+        <div class="modal-content">
             <div class="modal-header">
                 <h3 id="modalTitle">Pair P&L Analysis</h3>
-                <button class="modal-close" onclick="closeChartModal()">×</button>
+                <button class="modal-close" id="modalCloseBtn">×</button>
             </div>
             
             <div class="modal-body">
@@ -8050,10 +8094,10 @@ Full report in email.
             </div>
             
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="exportChart()">
+                <button class="btn btn-secondary" id="exportChartBtn">
                     📊 Export Chart as Image
                 </button>
-                <button class="btn btn-secondary" onclick="closeChartModal()">
+                <button class="btn btn-secondary" id="modalCloseBtnFooter">
                     Close
                 </button>
             </div>
