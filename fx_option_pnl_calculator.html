@@ -861,10 +861,16 @@ details > div {
     color: var(--cyan);
 }
 
-/* Highlight sorted column */
-.sorted-column {
+/* Highlight sorted column - ONLY for header cells */
+th.sorted-column {
     background: var(--bg-hover) !important;
 }
+
+/* NEVER apply sorted-column background to tbody cells - preserve their colors */
+tbody td.sorted-column {
+    background: inherit !important;
+}
+
 
 /* Utility Classes */
 .text-center { text-align: center; }
@@ -3138,49 +3144,92 @@ details > div {
         }
 
         function getCellColor(value, scale) {
-            // Handle edge cases
-            if (scale.min === scale.max) return '#000000'; // All same, use black
-
-            // Excel-style 3-color scale: Red -> White -> Green
+            if (!scale || scale.min === undefined || scale.max === undefined) {
+                return 'transparent';
+            }
+            
             const min = scale.min;
             const max = scale.max;
-            const mid = 0; // Midpoint at zero
-
+            const mid = 0;
+            
+            // Handle edge case
+            if (min === max) return 'rgb(70, 70, 70)';
+            
+            let ratio;
             let color;
-
-            if (value <= mid) {
-                // Between min and mid: Red to White
-                // Normalize to [0, 1] where 0 = min, 1 = mid
-                if (mid === min) {
-                    color = '#dc2626'; // Red if min equals mid
+            
+            if (value < mid) {
+                // Negative range: Deep Red → Red → Yellow/Orange
+                ratio = (value - min) / (mid - min);
+                ratio = Math.max(0, Math.min(1, ratio));
+                
+                if (ratio < 0.5) {
+                    // Deep red to red (worst to bad)
+                    const t = ratio * 2;
+                    const r = Math.round(139 + (220 - 139) * t);
+                    const g = Math.round(0 + (38 - 0) * t);
+                    const b = Math.round(0 + (38 - 0) * t);
+                    color = { r, g, b };
                 } else {
-                    const normalized = (value - min) / (mid - min);
-                    color = interpolateColor('#dc2626', '#ffffff', normalized); // Red to White
+                    // Red to yellow/orange (bad to neutral)
+                    const t = (ratio - 0.5) * 2;
+                    const r = Math.round(220 + (218 - 220) * t);
+                    const g = Math.round(38 + (165 - 38) * t);
+                    const b = Math.round(38 + (32 - 38) * t);
+                    color = { r, g, b };
                 }
+                
             } else {
-                // Between mid and max: White to Green
-                // Normalize to [0, 1] where 0 = mid, 1 = max
-                if (max === mid) {
-                    color = '#ffffff'; // White if max equals mid
+                // Positive range: Yellow → Light Green → Dark Green
+                ratio = (value - mid) / (max - mid);
+                ratio = Math.max(0, Math.min(1, ratio));
+                
+                if (ratio < 0.5) {
+                    // Yellow to light green (neutral to good)
+                    const t = ratio * 2;
+                    const r = Math.round(218 + (132 - 218) * t);
+                    const g = Math.round(165 + (204 - 165) * t);
+                    const b = Math.round(32 + (22 - 32) * t);
+                    color = { r, g, b };
                 } else {
-                    const normalized = (value - mid) / (max - mid);
-                    color = interpolateColor('#ffffff', '#059669', normalized); // White to Green
+                    // Light green to dark green (good to best)
+                    const t = (ratio - 0.5) * 2;
+                    const r = Math.round(132 + (34 - 132) * t);
+                    const g = Math.round(204 + (197 - 204) * t);
+                    const b = Math.round(22 + (94 - 22) * t);
+                    color = { r, g, b };
                 }
             }
-
-            return color;
+            
+            return `rgb(${color.r}, ${color.g}, ${color.b})`;
         }
 
         function getTextColorForBackground(backgroundColor) {
-            // Convert hex to RGB
-            const rgb = hexToRgb(backgroundColor);
+            let r, g, b;
             
-            // Calculate perceived brightness (0-255)
-            // Formula: https://www.w3.org/TR/AERT/#color-contrast
-            const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+            // Try to extract RGB values from rgb() format
+            const rgbMatch = backgroundColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            if (rgbMatch) {
+                r = parseInt(rgbMatch[1]);
+                g = parseInt(rgbMatch[2]);
+                b = parseInt(rgbMatch[3]);
+            } else {
+                // Try hex format
+                const rgb = hexToRgb(backgroundColor);
+                if (rgb) {
+                    r = rgb.r;
+                    g = rgb.g;
+                    b = rgb.b;
+                } else {
+                    return '#ffffff'; // Default to white text
+                }
+            }
             
-            // If background is bright, use dark text; if dark background, use light text
-            return brightness > 155 ? '#000000' : '#ffffff';
+            // Calculate perceived luminance
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+            
+            // Use black text on bright backgrounds, white on dark
+            return luminance > 140 ? '#000000' : '#ffffff';
         }
 
         function interpolateColor(color1Hex, color2Hex, factor) {
@@ -3640,8 +3689,8 @@ details > div {
             const currencyName = getCurrencyName(currency);
 
             let html = `
-<details style="margin: 16px 0; border-left: 3px solid #1e40af; padding-left: 16px;">
-    <summary style="cursor: pointer; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+<details style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #0a0a0a;">
+    <summary style="cursor: pointer; font-weight: 600; color: #ffffff; margin-bottom: 12px;">
         ▶ ${currencyName} (${pairs.length} pairs)
     </summary>
     <div style="overflow-x: auto;">
@@ -3761,8 +3810,8 @@ details > div {
                 html += `
             </tbody>
             <tfoot>
-                <tr style="border-top: 3px solid #1e40af; background: #f9fafb; font-weight: 700;">
-                    <td style="padding: 12px; font-weight: 700;">AVERAGE</td>
+                <tr style="border-top: 2px solid #06b6d4; background: #1a1a1a; font-weight: 700;">
+                    <td style="padding: 12px; font-weight: 700; color: #06b6d4;">AVERAGE</td>
                     <td style="padding: 12px; text-align: right; background-color: ${avgImplVolBgColor}; color: ${avgImplVolTextColor}; font-weight: 500;">
                         ${formatVolDecimal(avgImplVol)}
                     </td>
@@ -3807,8 +3856,8 @@ details > div {
             const currencyName = getCurrencyName(currency);
 
             let html = `
-<details style="margin: 16px 0; border-left: 3px solid #1e40af; padding-left: 16px;">
-    <summary style="cursor: pointer; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+<details style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #0a0a0a;">
+    <summary style="cursor: pointer; font-weight: 600; color: #ffffff; margin-bottom: 12px;">
         ▶ ${currencyName} (${groupData.correlations.length} correlations)
     </summary>
     <div style="overflow-x: auto;">
@@ -3879,8 +3928,8 @@ details > div {
             html += `
             </tbody>
             <tfoot>
-                <tr style="border-top: 3px solid #1e40af; background: #f9fafb; font-weight: 700;">
-                    <td colspan="2" style="padding: 12px; font-weight: 700;">AVERAGE (${count} correlations)</td>
+                <tr style="border-top: 2px solid #06b6d4; background: #1a1a1a; font-weight: 700;">
+                    <td colspan="2" style="padding: 12px; font-weight: 700; color: #06b6d4;">AVERAGE (${count} correlations)</td>
                     <td style="padding: 12px; text-align: right; background-color: ${avgImplCorrBgColor}; color: ${avgImplCorrTextColor}; font-weight: 500;">
                         ${formatCorrInteger(avgImplCorr)}
                     </td>
@@ -4018,8 +4067,8 @@ details > div {
             
             Object.entries(restructured).forEach(([mainCurrency, data]) => {
                 html += `
-        <details style="margin: 16px 0; border-left: 3px solid #1e40af; padding-left: 16px;">
-            <summary style="cursor: pointer; font-weight: 600; color: #1f2937; margin-bottom: 12px;">
+        <details style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #0a0a0a;">
+            <summary style="cursor: pointer; font-weight: 600; color: #ffffff; margin-bottom: 12px;">
                 ▶ ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)
             </summary>
             <div>`;
@@ -4088,8 +4137,8 @@ details > div {
                     html += `
                         </tbody>
                         <tfoot>
-                            <tr style="border-top: 2px solid #1e40af; background: #f0f9ff; font-weight: 600;">
-                                <td colspan="2" style="padding: 10px;">SUB-GROUP AVERAGE (${corrArray.length})</td>
+                            <tr style="border-top: 2px solid #06b6d4; background: #1a1a1a; font-weight: 600;">
+                                <td colspan="2" style="padding: 10px; color: #06b6d4;">SUB-GROUP AVERAGE (${corrArray.length})</td>
                                 <td style="padding: 10px; text-align: right; background-color: ${subAvgImplBg}; color: ${subAvgImplText};">
                                     ${formatCorrInteger(subAvgImpl)}
                                 </td>
@@ -4121,8 +4170,8 @@ details > div {
                 const overallDiffText = getTextColorForBackground(overallDiffBg);
 
                 html += `
-            <div style="margin-top: 20px; padding: 16px; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 8px;">
-                <div style="font-weight: 700; margin-bottom: 12px; color: #92400e;">
+            <div style="margin-top: 20px; padding: 16px; background: #141414; border-left: 3px solid #06b6d4; border-radius: 4px;">
+                <div style="font-weight: 700; margin-bottom: 12px; color: #06b6d4;">
                     ${mainCurrency} OVERALL AVERAGE (${uniqueCorrelations.length} unique correlations)
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
@@ -4899,8 +4948,8 @@ Full report in email.
                 const overallAvgDiff = uniqueCorrelations.reduce((sum, c) => sum + c.difference, 0) / uniqueCorrelations.length;
 
                 html += `
-                <div class="overall-summary" style="margin-top: 20px; padding: 12px 16px; background: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
-                    <div style="font-weight: 600; font-size: 14px; color: #1e40af; margin-bottom: 12px;">
+                <div class="overall-summary" style="margin-top: 20px; padding: 12px 16px; background: var(--bg-elevated); border-left: 3px solid var(--cyan); border-radius: 4px;">
+                    <div style="font-weight: 600; font-size: 14px; color: var(--cyan); margin-bottom: 12px;">
                         ${mainCurrency} OVERALL AVERAGE (${uniqueCorrelations.length} unique correlations)
                     </div>
                     <div class="summary-bar" style="display: flex; gap: 16px; justify-content: space-around;">
@@ -5431,20 +5480,23 @@ Full report in email.
 
         // Highlight the sorted column
         function highlightSortedColumn(table, columnIndex) {
-            // Remove previous highlights
+            // Remove previous highlights from all cells
             const allCells = table.querySelectorAll('td, th');
             allCells.forEach(cell => {
                 cell.classList.remove('sorted-column');
             });
             
-            // Add highlight to sorted column
-            const rows = table.querySelectorAll('tr');
-            rows.forEach(row => {
-                const cell = row.children[columnIndex];
-                if (cell) {
-                    cell.classList.add('sorted-column');
+            // Only highlight the header cell, NOT the body cells
+            // Body cells have their own color-coded backgrounds that must be preserved
+            const headerRow = table.querySelector('thead tr');
+            if (headerRow) {
+                const headerCell = headerRow.children[columnIndex];
+                if (headerCell) {
+                    headerCell.classList.add('sorted-column');
                 }
-            });
+            }
+            
+            // DO NOT highlight tbody cells - they have their own colors
         }
 
         function showBatchPairCharts(pair) {
