@@ -827,6 +827,45 @@ details > div {
     font-size: 16px;
 }
 
+/* Sortable Table Headers */
+.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 20px !important;
+    transition: background 0.15s, color 0.15s;
+}
+
+.sortable-header:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.sortable-header::after {
+    content: '⇅';
+    position: absolute;
+    right: 6px;
+    opacity: 0.3;
+    font-size: 10px;
+}
+
+.sortable-header.sort-asc::after {
+    content: '▲';
+    opacity: 1;
+    color: var(--cyan);
+}
+
+.sortable-header.sort-desc::after {
+    content: '▼';
+    opacity: 1;
+    color: var(--cyan);
+}
+
+/* Highlight sorted column */
+.sorted-column {
+    background: var(--bg-hover) !important;
+}
+
 /* Utility Classes */
 .text-center { text-align: center; }
 .text-right { text-align: right; }
@@ -4571,8 +4610,13 @@ Full report in email.
 
         function generateCorrRankingTable(correlations, startRank) {
             let html = '<table class="data-table"><thead><tr>';
-            html += '<th>Rank</th><th>Currency</th><th>Pair 1</th><th>Pair 2</th>';
-            html += '<th class="numeric-header">Impl Corr</th><th class="numeric-header">Real Corr</th><th class="numeric-header">Diff</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 0, \'number\')">Rank</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 1, \'string\')">Currency</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 2, \'string\')">Pair 1</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 3, \'string\')">Pair 2</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 4, \'number\')">Impl Corr</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 5, \'number\')">Real Corr</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 6, \'number\')">Diff</th>';
             html += '</tr></thead><tbody>';
             
             correlations.forEach((corr, i) => {
@@ -4907,13 +4951,13 @@ Full report in email.
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Rank</th>
-                            <th>Currency</th>
-                            <th>Pair 1</th>
-                            <th>Pair 2</th>
-                            <th class="numeric-header">Impl Corr</th>
-                            <th class="numeric-header">Real Corr</th>
-                            <th class="numeric-header">Difference</th>
+                            <th class="sortable-header" onclick="sortTable(this, 0, 'number')">Rank</th>
+                            <th class="sortable-header" onclick="sortTable(this, 1, 'string')">Currency</th>
+                            <th class="sortable-header" onclick="sortTable(this, 2, 'string')">Pair 1</th>
+                            <th class="sortable-header" onclick="sortTable(this, 3, 'string')">Pair 2</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 4, 'number')">Impl Corr</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 5, 'number')">Real Corr</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 6, 'number')">Difference</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -4945,13 +4989,13 @@ Full report in email.
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Rank</th>
-                            <th>Currency</th>
-                            <th>Pair 1</th>
-                            <th>Pair 2</th>
-                            <th class="numeric-header">Impl Corr</th>
-                            <th class="numeric-header">Real Corr</th>
-                            <th class="numeric-header">Difference</th>
+                            <th class="sortable-header" onclick="sortTable(this, 0, 'number')">Rank</th>
+                            <th class="sortable-header" onclick="sortTable(this, 1, 'string')">Currency</th>
+                            <th class="sortable-header" onclick="sortTable(this, 2, 'string')">Pair 1</th>
+                            <th class="sortable-header" onclick="sortTable(this, 3, 'string')">Pair 2</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 4, 'number')">Impl Corr</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 5, 'number')">Real Corr</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 6, 'number')">Difference</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -4996,11 +5040,11 @@ Full report in email.
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Pair 1</th>
-                            <th>Pair 2</th>
-                            <th class="numeric-header">Impl Corr</th>
-                            <th class="numeric-header">Real Corr</th>
-                            <th class="numeric-header">Difference</th>
+                            <th class="sortable-header" onclick="sortTable(this, 0, 'string')">Pair 1</th>
+                            <th class="sortable-header" onclick="sortTable(this, 1, 'string')">Pair 2</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 2, 'number')">Impl Corr</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 3, 'number')">Real Corr</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 4, 'number')">Difference</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -5062,9 +5106,17 @@ Full report in email.
 
         function generateRankingTable(pairs, startRank) {
             let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Rank</th><th>Pair</th><th class="numeric-header">Avg P&L</th>';
-            html += '<th class="numeric-header">10Δ Put</th><th class="numeric-header">25Δ Put</th><th class="numeric-header">ATM Call</th><th class="numeric-header">25Δ Call</th><th class="numeric-header">10Δ Call</th>';
-            html += '<th class="numeric-header">Real Vol</th><th class="numeric-header">Impl Vol</th><th class="numeric-header">Vol Diff</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 0, \'number\')">Rank</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 1, \'string\')">Pair</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 2, \'number\')">Avg P&L</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 3, \'number\')">10Δ Put</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 4, \'number\')">25Δ Put</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 5, \'number\')">ATM Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 6, \'number\')">25Δ Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 7, \'number\')">10Δ Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 8, \'number\')">Real Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Impl Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 10, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result], idx) => {
@@ -5162,9 +5214,16 @@ Full report in email.
         function generateCurrencyGroupTableForResults(pairs) {
             // This version takes pairs as [pair, result] tuples
             let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Pair</th><th class="numeric-header">Avg P&L</th>';
-            html += '<th class="numeric-header">10Δ Put</th><th class="numeric-header">25Δ Put</th><th class="numeric-header">ATM Call</th><th class="numeric-header">25Δ Call</th><th class="numeric-header">10Δ Call</th>';
-            html += '<th class="numeric-header">Real Vol</th><th class="numeric-header">Impl Vol</th><th class="numeric-header">Vol Diff</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 0, \'string\')">Pair</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 1, \'number\')">Avg P&L</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 2, \'number\')">10Δ Put</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 3, \'number\')">25Δ Put</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 4, \'number\')">ATM Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 5, \'number\')">25Δ Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 6, \'number\')">10Δ Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 7, \'number\')">Real Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 8, \'number\')">Impl Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result]) => {
@@ -5192,9 +5251,16 @@ Full report in email.
 
         function generateCurrencyGroupTable(pairs) {
             let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
-            html += '<th>Pair</th><th class="numeric-header">Avg P&L</th>';
-            html += '<th class="numeric-header">10Δ Put</th><th class="numeric-header">25Δ Put</th><th class="numeric-header">ATM Call</th><th class="numeric-header">25Δ Call</th><th class="numeric-header">10Δ Call</th>';
-            html += '<th class="numeric-header">Real Vol</th><th class="numeric-header">Impl Vol</th><th class="numeric-header">Vol Diff</th>';
+            html += '<th class="sortable-header" onclick="sortTable(this, 0, \'string\')">Pair</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 1, \'number\')">Avg P&L</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 2, \'number\')">10Δ Put</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 3, \'number\')">25Δ Put</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 4, \'number\')">ATM Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 5, \'number\')">25Δ Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 6, \'number\')">10Δ Call</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 7, \'number\')">Real Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 8, \'number\')">Impl Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
             pairs.forEach(([pair, result]) => {
@@ -5286,6 +5352,99 @@ Full report in email.
                 detailsDiv.classList.add('expanded');
                 arrow.textContent = `▼ ${pair}`;
             }
+        }
+
+        // Sort table by column
+        function sortTable(header, columnIndex, dataType) {
+            // Get the table
+            const table = header.closest('table');
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Determine sort direction
+            const isAscending = header.classList.contains('sort-asc');
+            const isDescending = header.classList.contains('sort-desc');
+            
+            let sortDirection;
+            if (isAscending) {
+                sortDirection = 'desc';
+            } else if (isDescending) {
+                sortDirection = 'asc';
+            } else {
+                sortDirection = 'asc';
+            }
+            
+            // Remove sort classes from all headers in this table
+            const allHeaders = table.querySelectorAll('th');
+            allHeaders.forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            
+            // Add sort class to clicked header
+            header.classList.add('sort-' + sortDirection);
+            
+            // Sort rows
+            rows.sort((a, b) => {
+                const cellA = a.children[columnIndex];
+                const cellB = b.children[columnIndex];
+                
+                if (!cellA || !cellB) return 0;
+                
+                let valueA = cellA.textContent.trim();
+                let valueB = cellB.textContent.trim();
+                
+                if (dataType === 'number') {
+                    // Remove currency symbols, commas, percentage signs, k suffix
+                    valueA = parseFloat(valueA.replace(/[$,k%+\s]/g, '')) || 0;
+                    valueB = parseFloat(valueB.replace(/[$,k%+\s]/g, '')) || 0;
+                    
+                    if (sortDirection === 'asc') {
+                        return valueA - valueB;
+                    } else {
+                        return valueB - valueA;
+                    }
+                } else {
+                    // String comparison
+                    if (sortDirection === 'asc') {
+                        return valueA.localeCompare(valueB);
+                    } else {
+                        return valueB.localeCompare(valueA);
+                    }
+                }
+            });
+            
+            // Remove all rows from tbody
+            while (tbody.firstChild) {
+                tbody.removeChild(tbody.firstChild);
+            }
+            
+            // Re-append sorted rows
+            rows.forEach(row => {
+                tbody.appendChild(row);
+            });
+            
+            // Highlight sorted column
+            highlightSortedColumn(table, columnIndex);
+        }
+
+        // Highlight the sorted column
+        function highlightSortedColumn(table, columnIndex) {
+            // Remove previous highlights
+            const allCells = table.querySelectorAll('td, th');
+            allCells.forEach(cell => {
+                cell.classList.remove('sorted-column');
+            });
+            
+            // Add highlight to sorted column
+            const rows = table.querySelectorAll('tr');
+            rows.forEach(row => {
+                const cell = row.children[columnIndex];
+                if (cell) {
+                    cell.classList.add('sorted-column');
+                }
+            });
         }
 
         function showBatchPairCharts(pair) {
