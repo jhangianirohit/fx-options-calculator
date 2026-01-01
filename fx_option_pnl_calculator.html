@@ -820,6 +820,80 @@ details > div {
     font-style: normal;
 }
 
+/* ============================================
+   Collapsible Currency Blocks
+   ============================================ */
+
+.collapsible {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: background-color 0.15s ease;
+}
+
+.collapsible:hover {
+    background: var(--bg-hover);
+}
+
+.collapse-icon {
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+    display: inline-block;
+    min-width: 16px;
+    text-align: center;
+}
+
+.currency-header.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+.currency-name {
+    flex: 1;
+}
+
+.currency-content {
+    max-height: 5000px;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.2s ease;
+    opacity: 1;
+}
+
+.currency-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+/* Nested collapsible (for correlation sub-groups) */
+.nested-correlation-group .collapsible {
+    padding: 8px 12px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.nested-correlation-group .currency-content {
+    padding-left: 0;
+}
+
+/* Block controls */
+.block-controls {
+    margin-bottom: 16px;
+    display: flex;
+    gap: 8px;
+}
+
+.block-controls .btn {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
 .batch-tab {
     padding: 14px 28px;
     background: transparent;
@@ -4687,6 +4761,11 @@ Full report in email.
             if (exportButtons) {
                 exportButtons.style.display = 'none';
             }
+            
+            // Restore collapsed states from previous session
+            setTimeout(() => {
+                restoreCurrencyBlockStates();
+            }, 100);
         }
 
         // Current active batch tab
@@ -4950,6 +5029,110 @@ Full report in email.
             }
         });
 
+        // ============================================
+        // COLLAPSIBLE CURRENCY BLOCKS
+        // ============================================
+
+        // Toggle currency block expand/collapse
+        function toggleCurrencyBlock(headerElement) {
+            // Get the content container
+            const contentElement = headerElement.nextElementSibling;
+            
+            if (!contentElement || !contentElement.classList.contains('currency-content')) {
+                console.warn('Currency content not found');
+                return;
+            }
+            
+            // Toggle collapsed state
+            const isCollapsed = contentElement.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                // Expand
+                headerElement.classList.remove('collapsed');
+                contentElement.classList.remove('collapsed');
+            } else {
+                // Collapse
+                headerElement.classList.add('collapsed');
+                contentElement.classList.add('collapsed');
+            }
+            
+            // Save state to localStorage
+            saveCurrencyBlockState(headerElement, !isCollapsed);
+        }
+
+        // Save collapsed state to localStorage
+        function saveCurrencyBlockState(headerElement, isCollapsed) {
+            const currencyName = headerElement.querySelector('.currency-name')?.textContent.trim();
+            if (!currencyName) return;
+            
+            // Create a clean key (remove emojis and special chars)
+            const cleanKey = currencyName.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
+            const stateKey = `currencyBlock_${cleanKey}`;
+            localStorage.setItem(stateKey, isCollapsed ? 'collapsed' : 'expanded');
+        }
+
+        // Restore collapsed states from localStorage
+        function restoreCurrencyBlockStates() {
+            const headers = document.querySelectorAll('.collapsible');
+            
+            headers.forEach(header => {
+                const currencyName = header.querySelector('.currency-name')?.textContent.trim();
+                if (!currencyName) return;
+                
+                // Create same clean key
+                const cleanKey = currencyName.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
+                const stateKey = `currencyBlock_${cleanKey}`;
+                const savedState = localStorage.getItem(stateKey);
+                
+                if (savedState === 'collapsed') {
+                    const contentElement = header.nextElementSibling;
+                    if (contentElement && contentElement.classList.contains('currency-content')) {
+                        header.classList.add('collapsed');
+                        contentElement.classList.add('collapsed');
+                    }
+                }
+            });
+        }
+
+        // Expand all currency blocks
+        function expandAllBlocks() {
+            const activeTab = document.querySelector('.batch-tab-panel.active');
+            if (!activeTab) return;
+            
+            const headers = activeTab.querySelectorAll('.collapsible');
+            const contents = activeTab.querySelectorAll('.currency-content');
+            
+            headers.forEach(header => header.classList.remove('collapsed'));
+            contents.forEach(content => content.classList.remove('collapsed'));
+            
+            // Clear localStorage for expanded blocks
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('currencyBlock_')) {
+                    localStorage.removeItem(key);
+                }
+            });
+        }
+
+        // Collapse all currency blocks
+        function collapseAllBlocks() {
+            const activeTab = document.querySelector('.batch-tab-panel.active');
+            if (!activeTab) return;
+            
+            const headers = activeTab.querySelectorAll('.collapsible');
+            const contents = activeTab.querySelectorAll('.currency-content');
+            
+            headers.forEach(header => {
+                header.classList.add('collapsed');
+                const currencyName = header.querySelector('.currency-name')?.textContent.trim();
+                if (currencyName) {
+                    const cleanKey = currencyName.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_');
+                    localStorage.setItem(`currencyBlock_${cleanKey}`, 'collapsed');
+                }
+            });
+            
+            contents.forEach(content => content.classList.add('collapsed'));
+        }
+
         function generateOverviewTab(pairResults, correlationResults) {
             let html = '<h2 style="margin-bottom: 24px;">Analysis Summary</h2>';
             
@@ -5075,6 +5258,14 @@ Full report in email.
         function generatePnLTab(pairResults) {
             let html = '<h2 style="margin-bottom: 24px;">P&L Analysis by Currency</h2>';
             
+            // Block controls
+            html += `
+                <div class="block-controls">
+                    <button class="btn btn-secondary" onclick="expandAllBlocks()">▼ Expand All</button>
+                    <button class="btn btn-secondary" onclick="collapseAllBlocks()">▶ Collapse All</button>
+                </div>
+            `;
+            
             // Currency Groups
             const analyzedPairs = [...new Set(pairResults.map(([pair, _]) => pair))];
             const currencyBlocks = buildCurrencyBlocksFromResults(analyzedPairs, batchData.currencies || []);
@@ -5094,11 +5285,15 @@ Full report in email.
                 const groupAvg = pairsWithResults.reduce((sum, [_, result]) => sum + result.avgPnL, 0) / pairsWithResults.length;
                 const currencyName = getCurrencyName(currency);
 
-                html += `<div class="currency-group-section">`;
-                html += `<h3 class="currency-header">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
+                html += `<div class="currency-group-section currency-block">`;
+                html += `<div class="currency-header collapsible" onclick="toggleCurrencyBlock(this)">
+                    <span class="collapse-icon">▼</span>
+                    <span class="currency-name">💱 ${currencyName} (${pairsWithResults.length} pairs)</span>
+                </div>`;
+                html += `<div class="currency-content">`;
                 html += generateCurrencyGroupTable(pairsWithResults);
                 html += `<div class="summary-block" style="margin-top: 12px;"><strong>Group Average:</strong> <span style="font-family: var(--font-mono);">${formatThousand(groupAvg)}</span></div>`;
-                html += `</div>`;
+                html += `</div></div>`;
             });
 
             // Expandable Details
@@ -5289,18 +5484,28 @@ Full report in email.
             // Top 5 / Bottom 5
             html += generateTopBottomCorrelations(correlationResults);
 
+            // Block controls
+            html += `
+                <div class="block-controls" style="margin-top: 24px;">
+                    <button class="btn btn-secondary" onclick="expandAllBlocks()">▼ Expand All</button>
+                    <button class="btn btn-secondary" onclick="collapseAllBlocks()">▶ Collapse All</button>
+                </div>
+            `;
+
             // Individual currency group tables
             // Use restructured correlations with nesting
             const restructured = restructureCorrelations(correlationResults);
             
             Object.entries(restructured).forEach(([mainCurrency, data]) => {
                 html += `
-            <div class="currency-correlation-block" style="margin-bottom: 32px; padding: 0;">
-                <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-left: 0;">
-                    ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)
-                </h3>`;
+            <div class="currency-correlation-block currency-block" style="margin-bottom: 32px; padding: 0;">
+                <div class="currency-header collapsible" onclick="toggleCurrencyBlock(this)" style="font-size: 16px; margin-bottom: 0;">
+                    <span class="collapse-icon">▼</span>
+                    <span class="currency-name">🔗 ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)</span>
+                </div>
+                <div class="currency-content" style="padding-top: 16px;">`;
 
-                // Nested groups - NO ADDITIONAL PADDING
+                // Nested groups - with collapsible sub-groups
                 Object.entries(data.nestedGroups).forEach(([secondaryCurrency, correlations]) => {
                     const corrArray = Array.isArray(correlations) ? correlations : [];
                     const mainPair = constructMainPair(mainCurrency, secondaryCurrency);
@@ -5309,10 +5514,12 @@ Full report in email.
                     const normalizedCorrs = corrArray.map(corr => normalizeCorrelationForDisplay(corr, mainPair));
                     
                     html += `
-                <div class="nested-correlation-group" style="margin: 16px 0; padding: 0;">
-                    <h4 style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 12px; padding-left: 0;">
-                        ${mainCurrency}-${secondaryCurrency} Correlations (${corrArray.length})
-                    </h4>`;
+                <div class="nested-correlation-group" style="margin: 12px 0; padding: 0;">
+                    <div class="collapsible" onclick="toggleCurrencyBlock(this)" style="font-size: 14px; padding: 8px 12px; background: var(--bg-elevated); border-radius: 4px; margin-bottom: 0;">
+                        <span class="collapse-icon">▼</span>
+                        <span class="currency-name">${mainCurrency}-${secondaryCurrency} Correlations (${corrArray.length})</span>
+                    </div>
+                    <div class="currency-content" style="padding-top: 8px;">`;
                     
                     // Use existing generateCurrencyCorrelationTable but with normalized correlations
                     const tempGroupData = { 
@@ -5323,6 +5530,7 @@ Full report in email.
                         count: corrArray.length
                     };
                     html += generateCurrencyCorrelationTable(`${mainCurrency}-${secondaryCurrency}`, tempGroupData);
+                    html += `</div></div>`;
                 });
 
                 // Overall block summary
@@ -5350,6 +5558,7 @@ Full report in email.
                             <div class="summary-value ${overallAvgDiff >= 0 ? 'pnl-positive' : 'pnl-negative'}">${formatCorrelationDiff(overallAvgDiff)}</div>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>`;
             });
