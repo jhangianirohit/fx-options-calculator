@@ -732,7 +732,7 @@ details > div {
 
 /* Batch Analysis Tabs */
 .batch-tabs-container {
-    margin-bottom: 24px;
+    margin-bottom: 0;
     border-bottom: 1px solid var(--border);
     background: var(--bg-elevated);
     border-radius: 4px 4px 0 0;
@@ -741,6 +741,83 @@ details > div {
 .batch-tabs {
     display: flex;
     gap: 0;
+}
+
+/* Filter Panel */
+.filter-panel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.filter-controls {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    flex: 1;
+    min-width: 200px;
+}
+
+.filter-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.filter-group input[type="text"] {
+    width: 100%;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+.filter-group input[type="text"]:focus {
+    outline: none;
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.1);
+}
+
+.filter-group input[type="text"]::placeholder {
+    color: var(--text-muted);
+}
+
+.filter-group select {
+    width: 100%;
+    padding: 8px 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.filter-status {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.filter-status.active {
+    color: var(--cyan);
+    font-style: normal;
 }
 
 .batch-tab {
@@ -4541,6 +4618,44 @@ Full report in email.
                     </div>
                 </div>
 
+                <div class="filter-panel">
+                    <div class="filter-controls">
+                        <div class="filter-group">
+                            <label for="pairSearch">Search Pairs</label>
+                            <input 
+                                type="text" 
+                                id="pairSearch" 
+                                placeholder="Type pair name (e.g., EURUSD, GBP, JPY...)"
+                                oninput="filterResults()"
+                            />
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="currencyFilter">Filter by Currency</label>
+                            <select id="currencyFilter" onchange="filterResults()">
+                                <option value="">All Currencies</option>
+                                <option value="USD">USD Pairs</option>
+                                <option value="EUR">EUR Crosses</option>
+                                <option value="GBP">GBP Crosses</option>
+                                <option value="CHF">CHF Crosses</option>
+                                <option value="JPY">JPY Crosses</option>
+                                <option value="AUD">AUD Crosses</option>
+                                <option value="NZD">NZD Crosses</option>
+                                <option value="CAD">CAD Crosses</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group" style="flex: 0;">
+                            <label>&nbsp;</label>
+                            <button class="btn btn-secondary" onclick="clearFilters()">
+                                ✕ Clear
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="filterStatus" class="filter-status"></div>
+                </div>
+
                 <div id="tab-overview" class="batch-tab-panel active">
                     ${overviewHTML}
                 </div>
@@ -4600,7 +4715,240 @@ Full report in email.
             if (selectedTab) {
                 selectedTab.classList.add('active');
             }
+            
+            // Clear filters when switching tabs
+            clearFilters();
         }
+
+        // ============================================
+        // SEARCH & FILTER FUNCTIONALITY
+        // ============================================
+        
+        // Filter state
+        let currentSearchTerm = '';
+        let currentCurrencyFilter = '';
+        let searchTimeout;
+
+        // Main filter function (debounced)
+        function filterResults() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                const searchInput = document.getElementById('pairSearch');
+                const currencySelect = document.getElementById('currencyFilter');
+                
+                currentSearchTerm = searchInput ? searchInput.value.toUpperCase() : '';
+                currentCurrencyFilter = currencySelect ? currencySelect.value : '';
+                
+                filterTables();
+                updateFilterStatus();
+            }, 200); // Wait 200ms after user stops typing
+        }
+
+        // Filter all tables
+        function filterTables() {
+            // Get all data tables in active tab
+            const activeTab = document.querySelector('.batch-tab-panel.active');
+            if (!activeTab) return;
+            
+            const tables = activeTab.querySelectorAll('.data-table');
+            let totalVisible = 0;
+            let totalRows = 0;
+            
+            tables.forEach(table => {
+                const tbody = table.querySelector('tbody');
+                if (!tbody) return;
+                
+                const rows = tbody.querySelectorAll('tr');
+                let visibleCount = 0;
+                
+                rows.forEach(row => {
+                    // Get pair name from first or second cell
+                    const cells = row.querySelectorAll('td');
+                    let pairName = '';
+                    
+                    // Try to find a cell that looks like a pair name
+                    for (let i = 0; i < Math.min(3, cells.length); i++) {
+                        const cellText = cells[i].textContent.trim().toUpperCase();
+                        // Check if it looks like a currency pair
+                        if (cellText.match(/^[A-Z]{6,7}$/) || cellText.includes('USD') || cellText.includes('EUR') || cellText.includes('GBP')) {
+                            pairName = cellText;
+                            break;
+                        }
+                    }
+                    
+                    // If no pair found, use first cell
+                    if (!pairName && cells[0]) {
+                        pairName = cells[0].textContent.trim().toUpperCase();
+                    }
+                    
+                    totalRows++;
+                    
+                    // Check if row matches filters
+                    let matchesSearch = true;
+                    let matchesCurrency = true;
+                    
+                    // Search filter
+                    if (currentSearchTerm) {
+                        matchesSearch = pairName.includes(currentSearchTerm);
+                    }
+                    
+                    // Currency filter
+                    if (currentCurrencyFilter) {
+                        matchesCurrency = pairName.includes(currentCurrencyFilter);
+                    }
+                    
+                    // Show or hide row
+                    if (matchesSearch && matchesCurrency) {
+                        row.style.display = '';
+                        visibleCount++;
+                        totalVisible++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                
+                // Handle empty table containers
+                const container = table.closest('.currency-group-section, .summary-section, .currency-block, .card');
+                if (container && container.querySelector('table') === table) {
+                    if (visibleCount === 0 && (currentSearchTerm || currentCurrencyFilter)) {
+                        container.style.opacity = '0.3';
+                    } else {
+                        container.style.opacity = '';
+                    }
+                }
+            });
+            
+            // Also filter expandable pairs
+            const expandablePairs = activeTab.querySelectorAll('.expandable-pair');
+            expandablePairs.forEach(pair => {
+                const header = pair.querySelector('.pair-header');
+                if (!header) return;
+                
+                const pairName = header.textContent.trim().toUpperCase();
+                
+                let matchesSearch = !currentSearchTerm || pairName.includes(currentSearchTerm);
+                let matchesCurrency = !currentCurrencyFilter || pairName.includes(currentCurrencyFilter);
+                
+                if (matchesSearch && matchesCurrency) {
+                    pair.style.display = '';
+                } else {
+                    pair.style.display = 'none';
+                }
+            });
+        }
+
+        // Update filter status message
+        function updateFilterStatus() {
+            const statusDiv = document.getElementById('filterStatus');
+            if (!statusDiv) return;
+            
+            const hasFilters = currentSearchTerm || currentCurrencyFilter;
+            
+            if (!hasFilters) {
+                statusDiv.textContent = '';
+                statusDiv.classList.remove('active');
+                return;
+            }
+            
+            // Count visible pairs in active tab
+            const activeTab = document.querySelector('.batch-tab-panel.active');
+            if (!activeTab) return;
+            
+            let visiblePairs = 0;
+            let totalPairs = 0;
+            
+            const tables = activeTab.querySelectorAll('.data-table tbody');
+            tables.forEach(tbody => {
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(row => {
+                    totalPairs++;
+                    if (row.style.display !== 'none') {
+                        visiblePairs++;
+                    }
+                });
+            });
+            
+            // Build status message
+            let message = `Showing ${visiblePairs} of ${totalPairs} rows`;
+            
+            if (currentSearchTerm) {
+                message += ` matching "${currentSearchTerm}"`;
+            }
+            
+            if (currentCurrencyFilter) {
+                message += ` in ${currentCurrencyFilter}`;
+            }
+            
+            statusDiv.textContent = message;
+            statusDiv.classList.add('active');
+        }
+
+        // Clear all filters
+        function clearFilters() {
+            // Clear input values
+            const searchInput = document.getElementById('pairSearch');
+            const currencySelect = document.getElementById('currencyFilter');
+            
+            if (searchInput) searchInput.value = '';
+            if (currencySelect) currencySelect.value = '';
+            
+            // Reset filter state
+            currentSearchTerm = '';
+            currentCurrencyFilter = '';
+            
+            // Show all rows in all tabs
+            const tables = document.querySelectorAll('.data-table');
+            tables.forEach(table => {
+                const tbody = table.querySelector('tbody');
+                if (!tbody) return;
+                
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(row => {
+                    row.style.display = '';
+                });
+                
+                // Reset container opacity
+                const container = table.closest('.currency-group-section, .summary-section, .currency-block, .card');
+                if (container) {
+                    container.style.opacity = '';
+                }
+            });
+            
+            // Show all expandable pairs
+            const expandablePairs = document.querySelectorAll('.expandable-pair');
+            expandablePairs.forEach(pair => {
+                pair.style.display = '';
+            });
+            
+            // Clear status
+            const statusDiv = document.getElementById('filterStatus');
+            if (statusDiv) {
+                statusDiv.textContent = '';
+                statusDiv.classList.remove('active');
+            }
+        }
+
+        // Keyboard shortcuts for search
+        document.addEventListener('keydown', function(e) {
+            // Ctrl+F or Cmd+F to focus search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                const searchInput = document.getElementById('pairSearch');
+                if (searchInput && document.querySelector('.batch-tab-panel.active')) {
+                    e.preventDefault();
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            }
+            
+            // Escape to clear filters when in search box
+            if (e.key === 'Escape') {
+                const searchInput = document.getElementById('pairSearch');
+                if (searchInput && document.activeElement === searchInput) {
+                    clearFilters();
+                    searchInput.blur();
+                }
+            }
+        });
 
         function generateOverviewTab(pairResults, correlationResults) {
             let html = '<h2 style="margin-bottom: 24px;">Analysis Summary</h2>';
