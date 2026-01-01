@@ -904,30 +904,31 @@ details > div {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
     background: rgba(0, 0, 0, 0.92);
     z-index: 99999;
     overflow-y: auto;
     padding: 20px;
-    box-sizing: border-box;
-}
-
-.modal-overlay.active {
-    display: flex !important;
     align-items: center;
     justify-content: center;
 }
 
+.modal-overlay.active {
+    display: flex !important;
+}
+
 .modal-content {
-    background: #1a1a1a;
+    background: var(--bg-elevated);
     border: 2px solid var(--cyan);
     border-radius: 8px;
     width: 90%;
     max-width: 1200px;
     max-height: 90vh;
     overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 255, 255, 0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
     position: relative;
     z-index: 100000;
 }
@@ -5312,54 +5313,68 @@ Full report in email.
 
         // Open chart modal
         function openChartModal(pair, strikeType) {
-            console.log('=== OPENING MODAL ===');
-            console.log('Pair:', pair);
-            console.log('Strike:', strikeType);
-            
-            // Get modal element
             const modal = document.getElementById('chartModal');
-            console.log('Modal element:', modal);
-            
             if (!modal) {
-                console.error('MODAL NOT FOUND IN DOM!');
-                alert('Error: Modal element not found. Check console.');
+                alert('Modal not found');
                 return;
             }
             
-            // Show modal
-            console.log('Adding active class...');
+            // Force display
+            modal.style.display = 'flex';
             modal.classList.add('active');
-            
-            // Debug computed styles
-            console.log('Modal classes:', modal.className);
-            console.log('Modal display:', window.getComputedStyle(modal).display);
-            console.log('Modal z-index:', window.getComputedStyle(modal).zIndex);
-            console.log('Modal visibility:', window.getComputedStyle(modal).visibility);
-            console.log('Modal opacity:', window.getComputedStyle(modal).opacity);
-            
-            // Prevent body scroll
             document.body.style.overflow = 'hidden';
-            console.log('Body overflow locked');
             
-            // Load chart data
-            loadChartData(pair, strikeType);
+            // Update title
+            const strikeNames = {
+                'put10Delta': '10Δ Put',
+                'put25Delta': '25Δ Put',
+                'atmCall': 'ATM Call',
+                'call25Delta': '25Δ Call',
+                'call10Delta': '10Δ Call',
+                'avgPnL': 'Average P&L'
+            };
             
-            console.log('=== MODAL SHOULD BE VISIBLE ===');
+            const titleEl = document.getElementById('modalTitle');
+            if (titleEl) {
+                titleEl.textContent = `${pair} - ${strikeNames[strikeType] || strikeType}`;
+            }
+            
+            // Show placeholder in chart container
+            const chartContainer = document.getElementById('chartContainer');
+            if (chartContainer) {
+                chartContainer.innerHTML = `
+                    <div style="text-align: center; padding: 60px; color: var(--text-white);">
+                        <h3 style="color: var(--cyan); margin-bottom: 16px;">${pair} - ${strikeNames[strikeType] || strikeType}</h3>
+                        <p style="margin-top: 20px; color: var(--text-secondary);">
+                            Modal is working! Chart will appear here in Part B.
+                        </p>
+                    </div>
+                `;
+            }
+            
+            // Display pair info if available
+            if (window.lastPnLResults && window.lastPnLResults[pair]) {
+                displayPairInfo(pair, window.lastPnLResults[pair]);
+                displayStrikeBreakdown(pair, window.lastPnLResults[pair]);
+            } else {
+                const infoContainer = document.getElementById('modalPairInfo');
+                if (infoContainer) {
+                    infoContainer.innerHTML = `
+                        <div style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                            Pair data will appear after running analysis.
+                        </div>
+                    `;
+                }
+            }
         }
 
         // Close chart modal
-        function closeChartModal(event) {
-            // Check if clicking on overlay (not content)
-            if (event && event.target !== event.currentTarget) {
-                return;
-            }
-            
+        function closeChartModal() {
             const modal = document.getElementById('chartModal');
             if (modal) {
+                modal.style.display = 'none';
                 modal.classList.remove('active');
             }
-            
-            // Restore body scroll
             document.body.style.overflow = '';
         }
 
