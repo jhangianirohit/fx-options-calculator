@@ -1049,6 +1049,14 @@ details > div {
     border-bottom: 1px solid var(--border-subtle);
 }
 
+.strike-breakdown-table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.strike-breakdown-table tbody tr:hover {
+    background-color: rgba(0, 255, 255, 0.1) !important;
+}
+
 /* Chart-enabled cells - CSP-safe with data attributes */
 .chart-cell {
     cursor: pointer;
@@ -5352,8 +5360,10 @@ Full report in email.
             // Display pair info and generate chart if data available
             if (window.lastPnLResults && window.lastPnLResults[pair]) {
                 const pairData = window.lastPnLResults[pair];
-                displayPairInfo(pair, pairData);
-                displayStrikeBreakdown(pair, pairData);
+                // Store current strike type for table row clicks
+                window.currentStrikeType = strikeType;
+                displayPairInfo(pair, pairData, strikeType);
+                displayStrikeBreakdown(pair, pairData, strikeType);
                 
                 // Generate the interactive chart
                 generatePnLChart(pair, strikeType, pairData);
@@ -5436,14 +5446,30 @@ Full report in email.
         }
 
         // Display pair info summary
-        function displayPairInfo(pair, data) {
+        function displayPairInfo(pair, data, strikeType) {
             const infoContainer = document.getElementById('modalPairInfo');
             if (!infoContainer) return;
             
             // Use volDiff (the actual property name in the data object)
             const volDiff = data.volDiff || 0;
             const volDiffColor = volDiff >= 0 ? 'var(--green)' : 'var(--red)';
-            const avgPnLColor = data.avgPnL >= 0 ? 'var(--green)' : 'var(--red)';
+            
+            // Get the specific strike's P&L instead of average
+            const strikeNames = {
+                'put10Delta': '10Δ Put',
+                'put25Delta': '25Δ Put',
+                'atmCall': 'ATM Call',
+                'call25Delta': '25Δ Call',
+                'call10Delta': '10Δ Call'
+            };
+            const strikeName = strikeNames[strikeType];
+            let strikePnL = null;
+            let strikePnLColor = 'var(--text-white)';
+            
+            if (strikeName && data.strikes && data.strikes[strikeName]) {
+                strikePnL = data.strikes[strikeName].finalPnL;
+                strikePnLColor = strikePnL >= 0 ? 'var(--green)' : 'var(--red)';
+            }
             
             const html = `
                 <div class="info-item">
@@ -5465,9 +5491,9 @@ Full report in email.
                     </div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Average P&L</div>
-                    <div class="info-value" style="color: ${avgPnLColor};">
-                        ${formatPnLRounded(data.avgPnL)}
+                    <div class="info-label">${strikeName ? strikeName + ' P&L' : 'P&L'}</div>
+                    <div class="info-value" style="color: ${strikePnLColor};">
+                        ${strikePnL !== null ? formatPnLRounded(strikePnL) : '—'}
                     </div>
                 </div>
             `;
@@ -5476,16 +5502,25 @@ Full report in email.
         }
 
         // Display strike breakdown table
-        function displayStrikeBreakdown(pair, data) {
+        function displayStrikeBreakdown(pair, data, currentStrikeType) {
             const container = document.getElementById('strikeBreakdown');
             if (!container) return;
             
             const strikes = data.strikes || {};
             const strikeOrder = ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'];
             
+            // Map strike names to strikeType values
+            const strikeTypeMap = {
+                '10Δ Put': 'put10Delta',
+                '25Δ Put': 'put25Delta',
+                'ATM Call': 'atmCall',
+                '25Δ Call': 'call25Delta',
+                '10Δ Call': 'call10Delta'
+            };
+            
             let html = `
                 <h4 style="margin-bottom: 12px; color: var(--text-white);">Strike Breakdown</h4>
-                <table>
+                <table class="strike-breakdown-table">
                     <thead>
                         <tr>
                             <th>Strike</th>
@@ -5500,8 +5535,12 @@ Full report in email.
                 const strike = strikes[strikeName];
                 if (strike) {
                     const pnlColor = strike.finalPnL >= 0 ? 'var(--green)' : 'var(--red)';
+                    const strikeType = strikeTypeMap[strikeName];
+                    const isCurrent = strikeType === currentStrikeType;
+                    const rowStyle = isCurrent ? 'background-color: rgba(0, 255, 255, 0.1); cursor: pointer;' : 'cursor: pointer;';
+                    const hoverStyle = 'onmouseover="this.style.backgroundColor=\'rgba(0, 255, 255, 0.15)\'" onmouseout="this.style.backgroundColor=\'' + (isCurrent ? 'rgba(0, 255, 255, 0.1)' : 'transparent') + '\'"';
                     html += `
-                        <tr>
+                        <tr style="${rowStyle}" ${hoverStyle} onclick="switchChartStrike('${pair}', '${strikeType}')">
                             <td style="font-weight: 500;">${strikeName}</td>
                             <td style="font-family: var(--font-mono);">${strike.strikePrice?.toFixed(4) || '—'}</td>
                             <td style="font-family: var(--font-mono); color: ${pnlColor};">
@@ -5512,12 +5551,52 @@ Full report in email.
                 }
             });
             
+            // Add average P&L row
+            const avgPnLColor = data.avgPnL >= 0 ? 'var(--green)' : 'var(--red)';
             html += `
+                        <tr style="border-top: 2px solid var(--border); font-weight: 600; cursor: default;">
+                            <td style="font-weight: 600;">Average P&L</td>
+                            <td style="font-family: var(--font-mono);">—</td>
+                            <td style="font-family: var(--font-mono); color: ${avgPnLColor};">
+                                ${formatPnLRounded(data.avgPnL)}
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             `;
             
             container.innerHTML = html;
+        }
+        
+        // Switch chart to different strike when clicking table row
+        function switchChartStrike(pair, strikeType) {
+            console.log('Switching chart to:', pair, strikeType);
+            if (window.lastPnLResults && window.lastPnLResults[pair]) {
+                const pairData = window.lastPnLResults[pair];
+                // Update current strike type
+                window.currentStrikeType = strikeType;
+                
+                // Update modal title
+                const strikeNames = {
+                    'put10Delta': '10Δ Put',
+                    'put25Delta': '25Δ Put',
+                    'atmCall': 'ATM Call',
+                    'call25Delta': '25Δ Call',
+                    'call10Delta': '10Δ Call',
+                    'avgPnL': 'Average P&L'
+                };
+                const titleEl = document.getElementById('modalTitle');
+                if (titleEl) {
+                    titleEl.textContent = `${pair} - ${strikeNames[strikeType] || strikeType}`;
+                }
+                
+                // Update header info with new strike
+                displayPairInfo(pair, pairData, strikeType);
+                // Update table highlighting
+                displayStrikeBreakdown(pair, pairData, strikeType);
+                // Regenerate chart
+                generatePnLChart(pair, strikeType, pairData);
+            }
         }
 
         // Generate P&L chart using Plotly
@@ -5560,10 +5639,23 @@ Full report in email.
             
             // Extract data arrays (convert to thousands for readability)
             const timePoints = pnlData.map(p => p.time);
-            const portfolioValues = pnlData.map(p => p.portfolioValue / 1000);
+            const premiumValues = pnlData.map(p => p.premium / 1000);
             const optionValues = pnlData.map(p => p.optionValue / 1000);
             const hedgePnLs = pnlData.map(p => p.hedgePnL / 1000);
             const spotPrices = pnlData.map(p => p.spot);
+            
+            // Verify and recalculate portfolio values from components to ensure correctness
+            // Portfolio P&L = Initial Premium Paid + Option Value + Cumulative Delta Hedge P&L
+            const portfolioValues = pnlData.map((p, idx) => {
+                const calculated = (p.premium + p.optionValue + p.hedgePnL) / 1000;
+                const stored = p.portfolioValue / 1000;
+                // Verify they match (allow for tiny floating point differences)
+                if (Math.abs(calculated - stored) > 0.01) {
+                    console.warn(`Portfolio value mismatch at index ${idx}: calculated=${calculated.toFixed(2)}K, stored=${stored.toFixed(2)}K`);
+                }
+                // Use the calculated value to ensure correctness
+                return calculated;
+            });
             
             // Get timestamps if available, otherwise use time in hours
             const timestamps = window.lastTimestamps || [];
@@ -5586,28 +5678,44 @@ Full report in email.
             
             // Professional color palette
             const colors = {
-                pnl: '#00ff88',        // Bright green - most visible
-                option: '#ff6b6b',     // Coral red
-                hedge: '#4ecdc4',      // Teal
-                spot: '#ffd93d',       // Gold yellow
+                pnl: '#00ff88',        // Bright green - most visible (Portfolio P&L)
+                premium: '#ff6b6b',    // Coral red (Initial Premium Paid)
+                option: '#9d4edd',     // Purple (Option Value)
+                hedge: '#4ecdc4',      // Teal (Hedge P&L)
+                spot: '#ffd93d',       // Gold yellow (Spot Price)
                 zero: '#444444'        // Gray for zero line
             };
             
-            // Build traces - P&L is most prominent
+            // Build traces - Portfolio P&L is most prominent
             const traces = [
-                // Portfolio P&L (Total) - MOST VISIBLE
+                // Portfolio P&L (Total = Premium + Option Value + Hedge P&L) - MOST VISIBLE
                 {
                     x: xValues,
                     y: portfolioValues,
                     type: 'scatter',
                     mode: 'lines',
-                    name: 'Total P&L',
+                    name: 'Portfolio P&L',
                     line: {
                         color: colors.pnl,
-                        width: 3
+                        width: 4
                     },
                     yaxis: 'y',
-                    hovertemplate: '<b>Total P&L</b><br>%{x}<br>$%{y:,.1f}K<extra></extra>'
+                    hovertemplate: '<b>Portfolio P&L</b><br>$%{y:,.1f}K<extra></extra>'
+                },
+                // Initial Premium Paid
+                {
+                    x: xValues,
+                    y: premiumValues,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Initial Premium Paid',
+                    line: {
+                        color: colors.premium,
+                        width: 2,
+                        dash: 'dot'
+                    },
+                    yaxis: 'y',
+                    hovertemplate: '<b>Initial Premium Paid</b><br>$%{y:,.1f}K<extra></extra>'
                 },
                 // Option Value
                 {
@@ -5622,7 +5730,7 @@ Full report in email.
                         dash: 'dot'
                     },
                     yaxis: 'y',
-                    hovertemplate: '<b>Option Value</b><br>%{x}<br>$%{y:,.1f}K<extra></extra>'
+                    hovertemplate: '<b>Option Value</b><br>$%{y:,.1f}K<extra></extra>'
                 },
                 // Hedge P&L (Cumulative Delta Hedging)
                 {
@@ -5630,14 +5738,14 @@ Full report in email.
                     y: hedgePnLs,
                     type: 'scatter',
                     mode: 'lines',
-                    name: 'Hedge P&L',
+                    name: 'Cumulative Delta Hedge P&L',
                     line: {
                         color: colors.hedge,
                         width: 2,
                         dash: 'dash'
                     },
                     yaxis: 'y',
-                    hovertemplate: '<b>Hedge P&L</b><br>%{x}<br>$%{y:,.1f}K<extra></extra>'
+                    hovertemplate: '<b>Cumulative Delta Hedge P&L</b><br>$%{y:,.1f}K<extra></extra>'
                 },
                 // Spot Price - Secondary Y axis
                 {
@@ -5648,10 +5756,10 @@ Full report in email.
                     name: 'Spot',
                     line: {
                         color: colors.spot,
-                        width: 1.5
+                        width: 2
                     },
                     yaxis: 'y2',
-                    hovertemplate: '<b>Spot</b><br>%{x}<br>%{y:.5f}<extra></extra>'
+                    hovertemplate: '<b>Spot</b><br>%{y:.5f}<extra></extra>'
                 }
             ];
             
@@ -5672,13 +5780,29 @@ Full report in email.
                 hoverinfo: 'skip'
             });
             
-            // Calculate axis ranges
-            const pnlMin = Math.min(...portfolioValues, ...optionValues, ...hedgePnLs);
-            const pnlMax = Math.max(...portfolioValues, ...optionValues, ...hedgePnLs);
+            // Calculate axis ranges (include premium in range calculation)
+            const pnlMin = Math.min(...portfolioValues, ...premiumValues, ...optionValues, ...hedgePnLs);
+            const pnlMax = Math.max(...portfolioValues, ...premiumValues, ...optionValues, ...hedgePnLs);
             const pnlRange = pnlMax - pnlMin;
             const spotMin = Math.min(...spotPrices);
             const spotMax = Math.max(...spotPrices);
             const spotRange = spotMax - spotMin;
+            
+            // Calculate X-axis range - ensure it starts at 0 (or minimum time value)
+            const timeMin = Math.min(...timePoints);
+            const timeMax = Math.max(...timePoints);
+            const timeRange = timeMax - timeMin;
+            // Convert to hours if using hours, otherwise use as-is for timestamps
+            let xAxisMin, xAxisMax;
+            if (timestamps.length >= pnlData.length) {
+                // Using timestamps - let Plotly auto-range but ensure we include all data
+                xAxisMin = undefined; // Let Plotly auto-range for timestamps
+                xAxisMax = undefined;
+            } else {
+                // Using hours - explicitly set range starting from 0
+                xAxisMin = 0;
+                xAxisMax = timeMax / 60 + (timeRange / 60) * 0.05; // Add 5% padding on right
+            }
             
             const layout = {
                 paper_bgcolor: '#0a0a0a',
@@ -5695,7 +5819,8 @@ Full report in email.
                     gridcolor: '#1a1a1a',
                     zerolinecolor: '#333',
                     tickfont: { color: '#888', size: 10 },
-                    showgrid: true
+                    showgrid: true,
+                    range: xAxisMin !== undefined ? [xAxisMin, xAxisMax] : undefined
                 },
                 yaxis: {
                     title: {
@@ -8321,8 +8446,8 @@ Full report in email.
                 </div>
                 
                 <!-- Chart container -->
-                <div id="chartContainer" style="width: 100%; height: 500px; background: #0d0d0d; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
-                    <div style="color: #888;">Loading chart...</div>
+                <div id="chartContainer" style="width: 100%; height: 500px; background: #0d0d0d; border: 1px solid #333; border-radius: 4px; position: relative;">
+                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #888;">Loading chart...</div>
                 </div>
                 
                 <!-- Strike breakdown -->
