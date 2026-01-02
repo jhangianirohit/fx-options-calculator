@@ -28,6 +28,8 @@
     --bg-elevated: #141414;
     --bg-input: #1a1a1a;
     --bg-hover: #1f1f1f;
+    --bg-gradient: linear-gradient(135deg, #141414 0%, #0f0f0f 100%);
+    --bg-gradient-subtle: linear-gradient(180deg, rgba(20, 20, 20, 0.8) 0%, rgba(10, 10, 10, 0.9) 100%);
     
     /* Text */
     --text-primary: #e5e5e5;
@@ -37,13 +39,33 @@
     
     /* Semantic Colors */
     --green: #22c55e;
+    --green-light: #4ade80;
+    --green-dark: #16a34a;
     --red: #ef4444;
+    --red-light: #f87171;
+    --red-dark: #dc2626;
     --cyan: #06b6d4;
+    --cyan-light: #22d3ee;
+    --cyan-dark: #0891b2;
+    --cyan-glow: rgba(6, 182, 212, 0.3);
     --gray: #6b7280;
+    --yellow: #eab308;
+    --yellow-light: #facc15;
+    --orange: #f97316;
     
     /* Borders */
     --border: #262626;
     --border-strong: #404040;
+    --border-subtle: #1a1a1a;
+    --border-glow: rgba(6, 182, 212, 0.2);
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
+    --shadow-glow: 0 0 20px rgba(6, 182, 212, 0.2);
+    --shadow-glow-strong: 0 0 30px rgba(6, 182, 212, 0.4);
     
     /* Fonts */
     --font-sans: 'Inter', -apple-system, sans-serif;
@@ -63,60 +85,107 @@ body {
     color: var(--text-primary);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    animation: fadeInBody 0.4s ease;
+}
+
+@keyframes fadeInBody {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 /* Typography */
-h1 { font-size: 24px; font-weight: 700; color: var(--text-white); margin-bottom: 8px; }
-h2 { font-size: 18px; font-weight: 600; color: var(--text-white); margin-bottom: 12px; }
-h3 { font-size: 16px; font-weight: 600; color: var(--text-white); margin-bottom: 10px; }
-h4 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
-p { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+h1 { 
+    font-size: 28px; 
+    font-weight: 700; 
+    color: var(--text-white); 
+    margin-bottom: 12px; 
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+h2 { 
+    font-size: 22px; 
+    font-weight: 600; 
+    color: var(--text-white); 
+    margin-bottom: 16px; 
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+}
+h3 { 
+    font-size: 18px; 
+    font-weight: 600; 
+    color: var(--text-white); 
+    margin-bottom: 12px; 
+    line-height: 1.4;
+}
+h4 { 
+    font-size: 14px; 
+    font-weight: 600; 
+    color: var(--text-secondary); 
+    margin-bottom: 10px; 
+    letter-spacing: 0.01em;
+    line-height: 1.5;
+}
+p { 
+    font-size: 14px; 
+    color: var(--text-secondary); 
+    margin-bottom: 12px; 
+    line-height: 1.6;
+}
 
 /* Layout */
 .container {
     max-width: 1800px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 24px;
 }
 
 /* Header */
 .app-header {
     background: var(--bg-elevated);
+    background-image: var(--bg-gradient);
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
     z-index: 100;
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(10px);
 }
 
 .header-container {
     max-width: 1800px;
     margin: 0 auto;
-    padding: 16px 20px;
+    padding: 20px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .app-title {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--text-white);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+    letter-spacing: -0.01em;
 }
 
 .app-subtitle {
     font-size: 12px;
     color: var(--text-muted);
-    margin-top: 2px;
+    margin-top: 4px;
+    letter-spacing: 0.05em;
 }
 
 /* Tab Navigation */
 .tab-navigation {
     max-width: 1800px;
     margin: 0 auto;
-    padding: 0 20px;
+    padding: 0 24px;
     display: flex;
     gap: 0;
     background: var(--bg-elevated);
@@ -124,7 +193,7 @@ p { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
 }
 
 .tab-button {
-    padding: 12px 24px;
+    padding: 14px 28px;
     background: transparent;
     border: none;
     color: var(--text-secondary);
@@ -133,24 +202,58 @@ p { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
     font-weight: 500;
     cursor: pointer;
     border-bottom: 2px solid transparent;
-    transition: all 0.15s;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.tab-button::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--cyan);
+    transform: scaleX(0);
+    transition: transform 0.2s ease;
+    z-index: 1;
+}
+
+.tab-button:hover::before {
+    transform: scaleX(1);
 }
 
 .tab-button:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    color: var(--text-white);
+    background: rgba(6, 182, 212, 0.08);
 }
 
 .tab-button.active {
     color: var(--text-white);
-    border-bottom-color: var(--cyan);
+    background: rgba(6, 182, 212, 0.1);
+}
+
+.tab-button.active::before {
+    transform: scaleX(1);
 }
 
 .tab-content {
     display: none;
     max-width: 1800px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 24px;
+    animation: fadeInContent 0.3s ease;
+}
+
+@keyframes fadeInContent {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .tab-content.active {
@@ -161,10 +264,20 @@ p { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
 .card,
 .section {
     background: var(--bg-elevated);
+    background-image: var(--bg-gradient-subtle);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 16px;
-    margin-bottom: 20px;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-md);
+    transition: all 0.2s ease;
+}
+
+.card:hover,
+.section:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
 }
 
 .card-header,
@@ -174,20 +287,26 @@ p { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
     color: var(--text-white);
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 16px;
+    margin-bottom: 20px;
+    letter-spacing: 0.01em;
 }
 
 /* Forms */
 .input-section {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: 20px;
+    margin-bottom: 24px;
 }
 
 .input-group {
     display: flex;
     flex-direction: column;
+    transition: transform 0.2s ease;
+}
+
+.input-group:focus-within {
+    transform: translateY(-1px);
 }
 
 label {
@@ -208,12 +327,14 @@ select,
 textarea {
     font-family: var(--font-mono);
     font-size: 13px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     background: var(--bg-input);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     color: var(--text-primary);
     width: 100%;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
 }
 
 input:focus,
@@ -221,6 +342,14 @@ select:focus,
 textarea:focus {
     outline: none;
     border-color: var(--cyan);
+    box-shadow: var(--shadow-md), 0 0 0 3px var(--cyan-glow);
+    background: var(--bg-elevated);
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+    border-color: var(--border-strong);
 }
 
 input[type="checkbox"],
@@ -237,36 +366,54 @@ button,
     font-family: var(--font-sans);
     font-size: 14px;
     font-weight: 500;
-    padding: 10px 20px;
+    padding: 12px 24px;
     background: var(--bg-elevated);
     color: var(--text-white);
     border: 1px solid var(--border-strong);
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.2s ease;
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
 }
 
 button:hover,
 .btn:hover {
     background: var(--bg-hover);
     border-color: var(--cyan);
+    box-shadow: var(--shadow-md), var(--shadow-glow);
+    transform: translateY(-1px);
+}
+
+button:active,
+.btn:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
 }
 
 button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    transform: none !important;
+}
+
+button:disabled::before {
+    display: none;
 }
 
 .btn-primary {
     background: var(--bg-elevated);
     border-color: var(--cyan);
+    box-shadow: var(--shadow-sm), 0 0 0 1px var(--cyan-glow);
 }
 
 .btn-primary:hover {
-    box-shadow: 0 0 0 1px var(--cyan);
+    box-shadow: var(--shadow-md), var(--shadow-glow);
+    border-color: var(--cyan-light);
 }
 
 .btn-secondary,
@@ -280,22 +427,48 @@ button.secondary {
 button.secondary:hover {
     color: var(--text-primary);
     border-color: var(--border-strong);
+    background: var(--bg-elevated);
+}
+
+.btn-large {
+    padding: 16px 32px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 12px;
 }
 
 /* Upload Area */
 .upload-area,
 .drop-zone {
-    padding: 40px;
+    padding: 48px;
     background: var(--bg-elevated);
+    background-image: var(--bg-gradient-subtle);
     border: 2px dashed var(--border);
-    border-radius: 4px;
+    border-radius: 8px;
     text-align: center;
     cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-sm);
 }
 
 .upload-area:hover,
 .drop-zone:hover {
     border-color: var(--cyan);
+    background: var(--bg-hover);
+    box-shadow: var(--shadow-md), var(--shadow-glow);
+    transform: translateY(-2px);
+}
+
+.upload-area.drag-over,
+.drop-zone.drag-over {
+    border-color: var(--cyan-light);
+    background: rgba(6, 182, 212, 0.1);
+    box-shadow: var(--shadow-lg), var(--shadow-glow-strong);
+    transform: scale(1.02);
 }
 
 /* Tables */
@@ -305,41 +478,60 @@ table,
     border-collapse: collapse;
     background: var(--bg-main);
     font-size: 13px;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 thead {
     background: var(--bg-elevated);
+    background-image: var(--bg-gradient-subtle);
     position: sticky;
     top: 0;
     z-index: 10;
+    box-shadow: var(--shadow-sm);
 }
 
 th {
-    padding: 10px 12px;
+    padding: 14px 16px;
     text-align: left;
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-muted);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 2px solid var(--border);
+    transition: background-color 0.2s ease;
 }
 
 th.numeric-header {
     text-align: right;
 }
 
+th.sortable-header:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
 tbody tr {
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-subtle);
+    transition: all 0.2s ease;
+}
+
+tbody tr:nth-child(even) {
+    background: rgba(20, 20, 20, 0.3);
 }
 
 tbody tr:hover {
     background: var(--bg-elevated);
+    transform: scale(1.001);
+    box-shadow: var(--shadow-sm);
 }
 
 td {
-    padding: 10px 12px;
+    padding: 12px 16px;
     color: var(--text-primary);
+    transition: color 0.2s ease;
 }
 
 td:first-child {
@@ -403,8 +595,8 @@ tfoot td {
 }
 
 .results-tabs .tab-button:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    color: var(--text-white);
+    background: rgba(6, 182, 212, 0.08);
 }
 
 .results-tabs .tab-button.active {
@@ -425,9 +617,17 @@ tfoot td {
 .pair-selection-group {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 12px;
-    margin-bottom: 12px;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.pair-group:hover,
+.pair-selection-group:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-strong);
 }
 
 .pair-group h4,
@@ -534,11 +734,20 @@ tfoot td {
 .info-box,
 .alert {
     background: var(--bg-elevated);
+    background-image: var(--bg-gradient-subtle);
     border: 1px solid var(--border);
-    border-left: 3px solid var(--cyan);
-    border-radius: 4px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
+    border-left: 4px solid var(--cyan);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+}
+
+.info-box:hover,
+.alert:hover {
+    box-shadow: var(--shadow-md);
+    border-left-color: var(--cyan-light);
 }
 
 .info-box,
@@ -549,13 +758,48 @@ tfoot td {
     color: var(--text-white) !important;
 }
 
-.alert-warning {
+.alert-warning,
+.warning {
     border-color: var(--red);
     border-left-color: var(--red);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.alert-warning:hover,
+.warning:hover {
+    border-left-color: var(--red-light);
+    box-shadow: var(--shadow-md), 0 0 10px rgba(239, 68, 68, 0.2);
 }
 
 .alert-info {
     border-color: var(--cyan);
+    border-left-color: var(--cyan);
+    background: rgba(6, 182, 212, 0.05);
+}
+
+.alert-info:hover {
+    border-left-color: var(--cyan-light);
+    box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+
+.verification {
+    border-left-color: var(--green);
+    background: rgba(34, 197, 94, 0.05);
+}
+
+.verification:hover {
+    border-left-color: var(--green-light);
+    box-shadow: var(--shadow-md), 0 0 10px rgba(34, 197, 94, 0.2);
+}
+
+.error {
+    border-left-color: var(--red);
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.error:hover {
+    border-left-color: var(--red-light);
+    box-shadow: var(--shadow-md), 0 0 10px rgba(239, 68, 68, 0.2);
 }
 
 /* Expandable Pairs */
@@ -723,16 +967,40 @@ details > div {
 /* Progress Bar */
 .progress-bar {
     width: 100%;
-    height: 4px;
+    height: 6px;
     background: var(--bg-input);
-    border-radius: 2px;
+    border-radius: 6px;
     overflow: hidden;
+    box-shadow: inset var(--shadow-sm);
+    position: relative;
 }
 
 .progress-fill {
     height: 100%;
-    background: var(--cyan);
-    transition: width 0.3s ease;
+    background: linear-gradient(90deg, var(--cyan) 0%, var(--cyan-light) 100%);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 10px var(--cyan-glow);
+    position: relative;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
 }
 
 /* Batch Analysis Tabs */
@@ -912,12 +1180,23 @@ details > div {
     bottom: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.92);
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
     z-index: 99999;
     overflow-y: auto;
     padding: 20px;
     align-items: center;
     justify-content: center;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 .modal-overlay.active {
@@ -926,58 +1205,77 @@ details > div {
 
 .modal-content {
     background: var(--bg-elevated);
+    background-image: var(--bg-gradient);
     border: 2px solid var(--cyan);
-    border-radius: 8px;
+    border-radius: 12px;
     width: 90%;
     max-width: 1200px;
     max-height: 90vh;
     overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+    box-shadow: var(--shadow-xl), var(--shadow-glow-strong);
     position: relative;
     z-index: 100000;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 24px;
+    padding: 24px 28px;
     border-bottom: 1px solid var(--cyan);
-    background: #0d0d0d;
+    background: rgba(6, 182, 212, 0.05);
+    background-image: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(6, 182, 212, 0.05) 100%);
+    border-radius: 12px 12px 0 0;
 }
 
 .modal-header h3 {
     margin: 0;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 600;
-    color: #00ffff;
+    color: var(--cyan-light);
+    letter-spacing: -0.01em;
 }
 
 .modal-close {
-    background: none;
-    border: none;
-    font-size: 32px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    font-size: 24px;
     color: var(--text-secondary);
     cursor: pointer;
     padding: 0;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: all 0.15s;
+    border-radius: 6px;
+    transition: all 0.2s ease;
 }
 
 .modal-close:hover {
     background: var(--bg-hover);
     color: var(--text-white);
+    border-color: var(--cyan);
+    transform: rotate(90deg);
+    box-shadow: var(--shadow-sm);
 }
 
 .modal-body {
-    padding: 24px;
-    background: #1a1a1a;
-    color: #ffffff;
+    padding: 28px;
+    background: var(--bg-elevated);
+    color: var(--text-white);
 }
 
 .modal-footer {
@@ -1061,16 +1359,18 @@ details > div {
 .chart-cell {
     cursor: pointer;
     position: relative;
-    transition: box-shadow 0.15s ease, transform 0.1s ease;
+    transition: all 0.2s ease;
 }
 
 .chart-cell:hover {
-    box-shadow: 0 0 0 2px var(--cyan);
+    box-shadow: 0 0 0 2px var(--cyan), var(--shadow-glow);
     z-index: 10;
+    transform: translateY(-1px);
 }
 
 .chart-cell:active {
-    transform: scale(0.98);
+    transform: scale(0.98) translateY(0);
+    transition: transform 0.1s ease;
 }
 
 .batch-tab {
@@ -1251,7 +1551,8 @@ th {
    CONTRAST FIX - Readable Text on All Backgrounds
    ============================================ */
 
-/* Force dark text on light/colored backgrounds */
+/* Force dark text on specific colored backgrounds (only for page UI, not email HTML) */
+/* Note: Removed white/light color overrides to preserve email HTML styling */
 [style*="background-color: rgb(6, 182, 212)"],
 [style*="background-color: #06b6d4"],
 [style*="background: #06b6d4"],
@@ -1260,29 +1561,7 @@ th {
 [style*="background-color: rgb(34, 197, 94)"],
 [style*="background-color: #22c55e"],
 [style*="background: #22c55e"],
-[style*="background-color: green"],
-[style*="background-color: rgb(255, 255, 255)"],
-[style*="background-color: #ffffff"],
-[style*="background-color: white"],
-[style*="background: white"],
-[style*="background-color: #e8f4f8"],
-[style*="background: #e8f4f8"],
-[style*="background-color: #f"],
-[style*="background: #f"],
-[style*="background-color: #e"] {
-    background: var(--bg-elevated) !important;
-    color: var(--text-white) !important;
-}
-
-/* Override light blue backgrounds completely */
-[style*="background-color: #e8"],
-[style*="background: #e8"],
-[style*="background-color: #d8"],
-[style*="background: #d8"],
-[style*="background-color: rgb(232"],
-[style*="background: rgb(232"],
-[style*="background-color: rgb(216"],
-[style*="background: rgb(216"] {
+[style*="background-color: green"] {
     background: var(--bg-elevated) !important;
     color: var(--text-white) !important;
 }
@@ -3570,6 +3849,35 @@ th {
             return `rgb(${color.r}, ${color.g}, ${color.b})`;
         }
 
+        // Email-specific color function: uses original color scheme but lightened for dark text
+        function getEmailCellColor(value, scale) {
+            if (!scale || scale.min === undefined || scale.max === undefined) {
+                return '#ffffff';
+            }
+            
+            // Get the original color from getCellColor
+            const originalColor = getCellColor(value, scale);
+            
+            // Extract RGB from the original color
+            const rgbMatch = originalColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            if (!rgbMatch) {
+                return '#ffffff';
+            }
+            
+            const r = parseInt(rgbMatch[1]);
+            const g = parseInt(rgbMatch[2]);
+            const b = parseInt(rgbMatch[3]);
+            
+            // Lighten the color by mixing with white (70% original, 30% white)
+            // This preserves the original color scheme but makes it light enough for dark text
+            const lightenFactor = 0.7;
+            const lightR = Math.round(r * lightenFactor + 255 * (1 - lightenFactor));
+            const lightG = Math.round(g * lightenFactor + 255 * (1 - lightenFactor));
+            const lightB = Math.round(b * lightenFactor + 255 * (1 - lightenFactor));
+            
+            return `rgb(${lightR}, ${lightG}, ${lightB})`;
+        }
+
         function getTextColorForBackground(backgroundColor) {
             let r, g, b;
             
@@ -3767,32 +4075,29 @@ th {
         <tbody>`;
 
             sorted.forEach((item, idx) => {
-                // Calculate background colors
-                const implVolBgColor = getCellColor(item.impliedVol, scales.impliedVol);
-                const realVolBgColor = getCellColor(item.realizedVol, scales.realizedVol);
-                const volDiffBgColor = getCellColor(item.volDifference, scales.volDiff);
-                const avgPnLBgColor = getCellColor(item.avgPnL, scales.avgPnL);
+                // Calculate background colors (email uses light pastels)
+                const implVolBgColor = getEmailCellColor(item.impliedVol, scales.impliedVol);
+                const realVolBgColor = getEmailCellColor(item.realizedVol, scales.realizedVol);
+                const volDiffBgColor = getEmailCellColor(item.volDifference, scales.volDiff);
+                const avgPnLBgColor = getEmailCellColor(item.avgPnL, scales.avgPnL);
                 
-                // Calculate text colors
-                const implVolTextColor = getTextColorForBackground(implVolBgColor);
-                const realVolTextColor = getTextColorForBackground(realVolBgColor);
-                const volDiffTextColor = getTextColorForBackground(volDiffBgColor);
-                const avgPnLTextColor = getTextColorForBackground(avgPnLBgColor);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
             <tr style="border-bottom: 1px solid #f3f4f6;">
                 <td style="padding: 12px;">${idx + 1}</td>
                 <td style="padding: 12px; font-weight: 600;">${item.pair}</td>
-                <td style="padding: 12px; text-align: right; background-color: ${implVolBgColor}; color: ${implVolTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${implVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatVolDecimal(item.impliedVol)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${realVolBgColor}; color: ${realVolTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${realVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatVolDecimal(item.realizedVol)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${volDiffBgColor}; color: ${volDiffTextColor}; font-weight: 600;">
+                <td style="padding: 12px; text-align: right; background-color: ${volDiffBgColor}; color: ${emailTextColor}; font-weight: 600;">
                     ${item.volDifference >= 0 ? '+' : ''}${formatVolDecimal(item.volDifference)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${avgPnLBgColor}; color: ${avgPnLTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${avgPnLBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatPnLRounded(item.avgPnL)}
                 </td>
             </tr>`;
@@ -3841,32 +4146,29 @@ th {
 
             sorted.forEach((item, idx) => {
                 const rank = totalPairs - 4 + idx;
-                // Calculate background colors
-                const implVolBgColor = getCellColor(item.impliedVol, scales.impliedVol);
-                const realVolBgColor = getCellColor(item.realizedVol, scales.realizedVol);
-                const volDiffBgColor = getCellColor(item.volDifference, scales.volDiff);
-                const avgPnLBgColor = getCellColor(item.avgPnL, scales.avgPnL);
+                // Calculate background colors (email uses light pastels)
+                const implVolBgColor = getEmailCellColor(item.impliedVol, scales.impliedVol);
+                const realVolBgColor = getEmailCellColor(item.realizedVol, scales.realizedVol);
+                const volDiffBgColor = getEmailCellColor(item.volDifference, scales.volDiff);
+                const avgPnLBgColor = getEmailCellColor(item.avgPnL, scales.avgPnL);
                 
-                // Calculate text colors
-                const implVolTextColor = getTextColorForBackground(implVolBgColor);
-                const realVolTextColor = getTextColorForBackground(realVolBgColor);
-                const volDiffTextColor = getTextColorForBackground(volDiffBgColor);
-                const avgPnLTextColor = getTextColorForBackground(avgPnLBgColor);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
             <tr style="border-bottom: 1px solid #f3f4f6;">
                 <td style="padding: 12px;">${rank}</td>
                 <td style="padding: 12px; font-weight: 600;">${item.pair}</td>
-                <td style="padding: 12px; text-align: right; background-color: ${implVolBgColor}; color: ${implVolTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${implVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatVolDecimal(item.impliedVol)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${realVolBgColor}; color: ${realVolTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${realVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatVolDecimal(item.realizedVol)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${volDiffBgColor}; color: ${volDiffTextColor}; font-weight: 600;">
+                <td style="padding: 12px; text-align: right; background-color: ${volDiffBgColor}; color: ${emailTextColor}; font-weight: 600;">
                     ${item.volDifference >= 0 ? '+' : ''}${formatVolDecimal(item.volDifference)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${avgPnLBgColor}; color: ${avgPnLTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${avgPnLBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatPnLRounded(item.avgPnL)}
                 </td>
             </tr>`;
@@ -3918,14 +4220,12 @@ th {
 
             sorted.forEach((item, idx) => {
                 // Calculate background colors
-                const implCorrBgColor = getCellColor(item.impliedCorr, scales.impliedCorr);
-                const realCorrBgColor = getCellColor(item.realizedCorr, scales.realizedCorr);
-                const corrDiffBgColor = getCellColor(item.difference, scales.corrDiff);
+                const implCorrBgColor = getEmailCellColor(item.impliedCorr, scales.impliedCorr);
+                const realCorrBgColor = getEmailCellColor(item.realizedCorr, scales.realizedCorr);
+                const corrDiffBgColor = getEmailCellColor(item.difference, scales.corrDiff);
                 
-                // Calculate text colors
-                const implCorrTextColor = getTextColorForBackground(implCorrBgColor);
-                const realCorrTextColor = getTextColorForBackground(realCorrBgColor);
-                const corrDiffTextColor = getTextColorForBackground(corrDiffBgColor);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
             <tr style="border-bottom: 1px solid #f3f4f6;">
@@ -3933,13 +4233,13 @@ th {
                 <td style="padding: 12px; font-weight: 600;">${item.currency}</td>
                 <td style="padding: 12px;">${item.pair1}</td>
                 <td style="padding: 12px;">${item.pair2}</td>
-                <td style="padding: 12px; text-align: right; background-color: ${implCorrBgColor}; color: ${implCorrTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${implCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatCorrInteger(item.impliedCorr)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${realCorrBgColor}; color: ${realCorrTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${realCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatCorrInteger(item.realizedCorr)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${corrDiffBgColor}; color: ${corrDiffTextColor}; font-weight: 600;">
+                <td style="padding: 12px; text-align: right; background-color: ${corrDiffBgColor}; color: ${emailTextColor}; font-weight: 600;">
                     ${item.difference >= 0 ? '+' : ''}${formatCorrInteger(item.difference)}
                 </td>
             </tr>`;
@@ -3994,14 +4294,12 @@ th {
             sorted.forEach((item, idx) => {
                 const rank = totalCorrs - idx;
                 // Calculate background colors
-                const implCorrBgColor = getCellColor(item.impliedCorr, scales.impliedCorr);
-                const realCorrBgColor = getCellColor(item.realizedCorr, scales.realizedCorr);
-                const corrDiffBgColor = getCellColor(item.difference, scales.corrDiff);
+                const implCorrBgColor = getEmailCellColor(item.impliedCorr, scales.impliedCorr);
+                const realCorrBgColor = getEmailCellColor(item.realizedCorr, scales.realizedCorr);
+                const corrDiffBgColor = getEmailCellColor(item.difference, scales.corrDiff);
                 
-                // Calculate text colors
-                const implCorrTextColor = getTextColorForBackground(implCorrBgColor);
-                const realCorrTextColor = getTextColorForBackground(realCorrBgColor);
-                const corrDiffTextColor = getTextColorForBackground(corrDiffBgColor);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
             <tr style="border-bottom: 1px solid #f3f4f6;">
@@ -4009,13 +4307,13 @@ th {
                 <td style="padding: 12px; font-weight: 600;">${item.currency}</td>
                 <td style="padding: 12px;">${item.pair1}</td>
                 <td style="padding: 12px;">${item.pair2}</td>
-                <td style="padding: 12px; text-align: right; background-color: ${implCorrBgColor}; color: ${implCorrTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${implCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatCorrInteger(item.impliedCorr)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${realCorrBgColor}; color: ${realCorrTextColor}; font-weight: 500;">
+                <td style="padding: 12px; text-align: right; background-color: ${realCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                     ${formatCorrInteger(item.realizedCorr)}
                 </td>
-                <td style="padding: 12px; text-align: right; background-color: ${corrDiffBgColor}; color: ${corrDiffTextColor}; font-weight: 600;">
+                <td style="padding: 12px; text-align: right; background-color: ${corrDiffBgColor}; color: ${emailTextColor}; font-weight: 600;">
                     ${item.difference >= 0 ? '+' : ''}${formatCorrInteger(item.difference)}
                 </td>
             </tr>`;
@@ -4055,24 +4353,24 @@ th {
             const currencyName = getCurrencyName(currency);
 
             let html = `
-<details style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #0a0a0a;">
-    <summary style="cursor: pointer; font-weight: 600; color: #ffffff; margin-bottom: 12px;">
-        ▶ ${currencyName} (${pairs.length} pairs)
-    </summary>
+<div style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #f9fafb; padding: 16px;">
+    <div style="font-weight: 600; color: #1f2937; margin-bottom: 12px; font-size: 14px;">
+        ${currencyName} (${pairs.length} pairs)
+    </div>
     <div style="overflow-x: auto;">
-        <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; min-width: 1000px;">
+        <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; min-width: 1000px; background-color: #ffffff;">
             <thead>
                 <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
-                    <th style="padding: 10px; text-align: left;">Pair</th>
-                    <th style="padding: 10px; text-align: right;">Impl Vol</th>
-                    <th style="padding: 10px; text-align: right;">Real Vol</th>
-                    <th style="padding: 10px; text-align: right;">Vol Diff</th>
-                    <th style="padding: 10px; text-align: right;">10Δ Put</th>
-                    <th style="padding: 10px; text-align: right;">25Δ Put</th>
-                    <th style="padding: 10px; text-align: right;">ATM</th>
-                    <th style="padding: 10px; text-align: right;">25Δ Call</th>
-                    <th style="padding: 10px; text-align: right;">10Δ Call</th>
-                    <th style="padding: 10px; text-align: right;">Avg P&L</th>
+                    <th style="padding: 10px; text-align: left; background-color: #f9fafb;">Pair</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">Impl Vol</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">Real Vol</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">Vol Diff</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">10Δ Put</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">25Δ Put</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">ATM</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">25Δ Call</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">10Δ Call</th>
+                    <th style="padding: 10px; text-align: right; background-color: #f9fafb;">Avg P&L</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -4081,56 +4379,48 @@ th {
                 const data = pnlResults[pair];
                 if (!data || data.error) return;
 
-                // Calculate background colors
-                const implVolBgColor = getCellColor(data.impliedVol, scales.impliedVol);
-                const realVolBgColor = getCellColor(data.realizedVol, scales.realizedVol);
-                const volDiffBgColor = getCellColor(data.volDiff, scales.volDiff);
-                const put10BgColor = getCellColor(data.strikes['10Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
-                const put25BgColor = getCellColor(data.strikes['25Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
-                const atmBgColor = getCellColor(data.strikes['ATM Call']?.finalPnL || 0, scales.allStrikesPnL);
-                const call25BgColor = getCellColor(data.strikes['25Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
-                const call10BgColor = getCellColor(data.strikes['10Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
-                const avgPnLBgColor = getCellColor(data.avgPnL, scales.avgPnL);
+                // Calculate background colors (email uses light pastels)
+                const implVolBgColor = getEmailCellColor(data.impliedVol, scales.impliedVol);
+                const realVolBgColor = getEmailCellColor(data.realizedVol, scales.realizedVol);
+                const volDiffBgColor = getEmailCellColor(data.volDiff, scales.volDiff);
+                const put10BgColor = getEmailCellColor(data.strikes['10Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
+                const put25BgColor = getEmailCellColor(data.strikes['25Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
+                const atmBgColor = getEmailCellColor(data.strikes['ATM Call']?.finalPnL || 0, scales.allStrikesPnL);
+                const call25BgColor = getEmailCellColor(data.strikes['25Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
+                const call10BgColor = getEmailCellColor(data.strikes['10Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
+                const avgPnLBgColor = getEmailCellColor(data.avgPnL, scales.avgPnL);
                 
-                // Calculate text colors
-                const implVolTextColor = getTextColorForBackground(implVolBgColor);
-                const realVolTextColor = getTextColorForBackground(realVolBgColor);
-                const volDiffTextColor = getTextColorForBackground(volDiffBgColor);
-                const put10TextColor = getTextColorForBackground(put10BgColor);
-                const put25TextColor = getTextColorForBackground(put25BgColor);
-                const atmTextColor = getTextColorForBackground(atmBgColor);
-                const call25TextColor = getTextColorForBackground(call25BgColor);
-                const call10TextColor = getTextColorForBackground(call10BgColor);
-                const avgPnLTextColor = getTextColorForBackground(avgPnLBgColor);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
-                <tr style="border-bottom: 1px solid #f3f4f6;">
-                    <td style="padding: 10px; font-weight: 600;">${pair}</td>
-                    <td style="padding: 10px; text-align: right; background-color: ${implVolBgColor}; color: ${implVolTextColor}; font-weight: 500;">
+                <tr style="border-bottom: 1px solid #f3f4f6; background-color: #ffffff;">
+                    <td style="padding: 10px; font-weight: 600; background-color: #ffffff;">${pair}</td>
+                    <td style="padding: 10px; text-align: right; background-color: ${implVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatVolDecimal(data.impliedVol)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${realVolBgColor}; color: ${realVolTextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${realVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatVolDecimal(data.realizedVol)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${volDiffBgColor}; color: ${volDiffTextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${volDiffBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${data.volDiff >= 0 ? '+' : ''}${formatVolDecimal(data.volDiff)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${put10BgColor}; color: ${put10TextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${put10BgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatPnLRounded(data.strikes['10Δ Put']?.finalPnL || 0)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${put25BgColor}; color: ${put25TextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${put25BgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatPnLRounded(data.strikes['25Δ Put']?.finalPnL || 0)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${atmBgColor}; color: ${atmTextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${atmBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatPnLRounded(data.strikes['ATM Call']?.finalPnL || 0)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${call25BgColor}; color: ${call25TextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${call25BgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatPnLRounded(data.strikes['25Δ Call']?.finalPnL || 0)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${call10BgColor}; color: ${call10TextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${call10BgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatPnLRounded(data.strikes['10Δ Call']?.finalPnL || 0)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${avgPnLBgColor}; color: ${avgPnLTextColor}; font-weight: 600;">
+                    <td style="padding: 10px; text-align: right; background-color: ${avgPnLBgColor}; color: ${emailTextColor}; font-weight: 600;">
                         ${formatPnLRounded(data.avgPnL)}
                     </td>
                 </tr>`;
@@ -4160,43 +4450,39 @@ th {
                 const avgAvgPnL = sumAvgPnL / validCount;
 
                 // Calculate background colors for averages
-                const avgImplVolBgColor = getCellColor(avgImplVol, scales.impliedVol);
-                const avgRealVolBgColor = getCellColor(avgRealVol, scales.realizedVol);
-                const avgVolDiffBgColor = getCellColor(avgVolDiff, scales.volDiff);
-                const avgATMBgColor = getCellColor(avgATM, scales.allStrikesPnL);
-                const avgAvgPnLBgColor = getCellColor(avgAvgPnL, scales.avgPnL);
+                const avgImplVolBgColor = getEmailCellColor(avgImplVol, scales.impliedVol);
+                const avgRealVolBgColor = getEmailCellColor(avgRealVol, scales.realizedVol);
+                const avgVolDiffBgColor = getEmailCellColor(avgVolDiff, scales.volDiff);
+                const avgATMBgColor = getEmailCellColor(avgATM, scales.allStrikesPnL);
+                const avgAvgPnLBgColor = getEmailCellColor(avgAvgPnL, scales.avgPnL);
 
-                // Calculate text colors
-                const avgImplVolTextColor = getTextColorForBackground(avgImplVolBgColor);
-                const avgRealVolTextColor = getTextColorForBackground(avgRealVolBgColor);
-                const avgVolDiffTextColor = getTextColorForBackground(avgVolDiffBgColor);
-                const avgATMTextColor = getTextColorForBackground(avgATMBgColor);
-                const avgAvgPnLTextColor = getTextColorForBackground(avgAvgPnLBgColor);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
             </tbody>
             <tfoot>
-                <tr style="border-top: 2px solid #06b6d4; background: #1a1a1a; font-weight: 700;">
-                    <td style="padding: 12px; font-weight: 700; color: #06b6d4;">AVERAGE</td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgImplVolBgColor}; color: ${avgImplVolTextColor}; font-weight: 500;">
+                <tr style="border-top: 2px solid #06b6d4; background: #f3f4f6; font-weight: 700;">
+                    <td style="padding: 12px; font-weight: 700; color: #1f2937; background-color: #f3f4f6;">AVERAGE</td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgImplVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatVolDecimal(avgImplVol)}
                     </td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgRealVolBgColor}; color: ${avgRealVolTextColor}; font-weight: 500;">
+                    <td style="padding: 12px; text-align: right; background-color: ${avgRealVolBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatVolDecimal(avgRealVol)}
                     </td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgVolDiffBgColor}; color: ${avgVolDiffTextColor}; font-weight: 500;">
+                    <td style="padding: 12px; text-align: right; background-color: ${avgVolDiffBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${avgVolDiff >= 0 ? '+' : ''}${formatVolDecimal(avgVolDiff)}
                     </td>
-                    <td colspan="2" style="padding: 12px; text-align: center; color: #6b7280; font-style: italic;">
+                    <td colspan="2" style="padding: 12px; text-align: center; color: #6b7280; font-style: italic; background-color: #f3f4f6;">
                         —
                     </td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgATMBgColor}; color: ${avgATMTextColor}; font-weight: 500;">
+                    <td style="padding: 12px; text-align: right; background-color: ${avgATMBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatPnLRounded(avgATM)}
                     </td>
-                    <td colspan="2" style="padding: 12px; text-align: center; color: #6b7280; font-style: italic;">
+                    <td colspan="2" style="padding: 12px; text-align: center; color: #6b7280; font-style: italic; background-color: #f3f4f6;">
                         —
                     </td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgAvgPnLBgColor}; color: ${avgAvgPnLTextColor}; font-weight: 600;">
+                    <td style="padding: 12px; text-align: right; background-color: ${avgAvgPnLBgColor}; color: ${emailTextColor}; font-weight: 600;">
                         ${formatPnLRounded(avgAvgPnL)}
                     </td>
                 </tr>
@@ -4209,7 +4495,7 @@ th {
             html += `
         </table>
     </div>
-</details>`;
+</div>`;
 
             return html;
         }
@@ -4222,10 +4508,10 @@ th {
             const currencyName = getCurrencyName(currency);
 
             let html = `
-<details style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #0a0a0a;">
-    <summary style="cursor: pointer; font-weight: 600; color: #ffffff; margin-bottom: 12px;">
-        ▶ ${currencyName} (${groupData.correlations.length} correlations)
-    </summary>
+<div style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #f9fafb; padding: 16px;">
+    <div style="font-weight: 600; color: #1f2937; margin-bottom: 12px; font-size: 14px;">
+        ${currencyName} (${groupData.correlations.length} correlations)
+    </div>
     <div style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 12px;">
             <thead>
@@ -4240,27 +4526,25 @@ th {
             <tbody>`;
 
             groupData.correlations.forEach(corr => {
-                // Calculate background colors
-                const implCorrBgColor = getCellColor(corr.impliedCorr, scales.impliedCorr);
-                const realCorrBgColor = getCellColor(corr.realizedCorr, scales.realizedCorr);
-                const corrDiffBgColor = getCellColor(corr.difference, scales.corrDiff);
+                // Calculate background colors (email uses light pastels)
+                const implCorrBgColor = getEmailCellColor(corr.impliedCorr, scales.impliedCorr);
+                const realCorrBgColor = getEmailCellColor(corr.realizedCorr, scales.realizedCorr);
+                const corrDiffBgColor = getEmailCellColor(corr.difference, scales.corrDiff);
                 
-                // Calculate text colors
-                const implCorrTextColor = getTextColorForBackground(implCorrBgColor);
-                const realCorrTextColor = getTextColorForBackground(realCorrBgColor);
-                const corrDiffTextColor = getTextColorForBackground(corrDiffBgColor);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
                 <tr style="border-bottom: 1px solid #f3f4f6;">
                     <td style="padding: 10px;">${corr.pair1}</td>
                     <td style="padding: 10px;">${corr.pair2}</td>
-                    <td style="padding: 10px; text-align: right; background-color: ${implCorrBgColor}; color: ${implCorrTextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${implCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatCorrInteger(corr.impliedCorr)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${realCorrBgColor}; color: ${realCorrTextColor}; font-weight: 500;">
+                    <td style="padding: 10px; text-align: right; background-color: ${realCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatCorrInteger(corr.realizedCorr)}
                     </td>
-                    <td style="padding: 10px; text-align: right; background-color: ${corrDiffBgColor}; color: ${corrDiffTextColor}; font-weight: 600;">
+                    <td style="padding: 10px; text-align: right; background-color: ${corrDiffBgColor}; color: ${emailTextColor}; font-weight: 600;">
                         ${corr.difference >= 0 ? '+' : ''}${formatCorrInteger(corr.difference)}
                     </td>
                 </tr>`;
@@ -4281,35 +4565,33 @@ th {
             const avgRealCorr = sumRealCorr / count;
             const avgCorrDiff = sumCorrDiff / count;
 
-            // Calculate background colors
-            const avgImplCorrBgColor = getCellColor(avgImplCorr, scales.impliedCorr);
-            const avgRealCorrBgColor = getCellColor(avgRealCorr, scales.realizedCorr);
-            const avgCorrDiffBgColor = getCellColor(avgCorrDiff, scales.corrDiff);
+            // Calculate background colors (email uses light pastels)
+            const avgImplCorrBgColor = getEmailCellColor(avgImplCorr, scales.impliedCorr);
+            const avgRealCorrBgColor = getEmailCellColor(avgRealCorr, scales.realizedCorr);
+            const avgCorrDiffBgColor = getEmailCellColor(avgCorrDiff, scales.corrDiff);
 
-            // Calculate text colors
-            const avgImplCorrTextColor = getTextColorForBackground(avgImplCorrBgColor);
-            const avgRealCorrTextColor = getTextColorForBackground(avgRealCorrBgColor);
-            const avgCorrDiffTextColor = getTextColorForBackground(avgCorrDiffBgColor);
+            // Email always uses dark text on light backgrounds
+            const emailTextColor = '#1f2937';
 
             html += `
             </tbody>
             <tfoot>
-                <tr style="border-top: 2px solid #06b6d4; background: #1a1a1a; font-weight: 700;">
-                    <td colspan="2" style="padding: 12px; font-weight: 700; color: #06b6d4;">AVERAGE (${count} correlations)</td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgImplCorrBgColor}; color: ${avgImplCorrTextColor}; font-weight: 500;">
+                <tr style="border-top: 2px solid #06b6d4; background: #f3f4f6; font-weight: 700;">
+                    <td colspan="2" style="padding: 12px; font-weight: 700; color: #1f2937;">AVERAGE (${count} correlations)</td>
+                    <td style="padding: 12px; text-align: right; background-color: ${avgImplCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatCorrInteger(avgImplCorr)}
                     </td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgRealCorrBgColor}; color: ${avgRealCorrTextColor}; font-weight: 500;">
+                    <td style="padding: 12px; text-align: right; background-color: ${avgRealCorrBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${formatCorrInteger(avgRealCorr)}
                     </td>
-                    <td style="padding: 12px; text-align: right; background-color: ${avgCorrDiffBgColor}; color: ${avgCorrDiffTextColor}; font-weight: 500;">
+                    <td style="padding: 12px; text-align: right; background-color: ${avgCorrDiffBgColor}; color: ${emailTextColor}; font-weight: 500;">
                         ${avgCorrDiff >= 0 ? '+' : ''}${formatCorrInteger(avgCorrDiff)}
                     </td>
                 </tr>
             </tfoot>
         </table>
     </div>
-</details>`;
+</div>`;
 
             return html;
         }
@@ -4400,10 +4682,10 @@ th {
         function generateExpandableFullResults(pnlResults, correlationResults, scales, currencies) {
             let html = `
 <div style="margin-top: 48px;">
-    <details style="margin-bottom: 24px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
-        <summary style="cursor: pointer; font-weight: 600; font-size: 15px; color: #1f2937; padding: 8px;">
-            &gt;&gt; FULL P&L RESULTS - Click to expand
-        </summary>
+    <div style="margin-bottom: 24px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+        <div style="font-weight: 600; font-size: 15px; color: #1f2937; padding: 8px; margin-bottom: 16px;">
+            FULL P&L RESULTS
+        </div>
         <div style="padding: 16px 0;">`;
 
             const currencyGroups = buildCurrencyGroups(pnlResults, currencies);
@@ -4420,12 +4702,12 @@ th {
 
             html += `
         </div>
-    </details>
+    </div>
 
-    <details style="margin-bottom: 24px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
-        <summary style="cursor: pointer; font-weight: 600; font-size: 15px; color: #1f2937; padding: 8px;">
-            &gt;&gt; FULL CORRELATION RESULTS - Click to expand
-        </summary>
+    <div style="margin-bottom: 24px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px;">
+        <div style="font-weight: 600; font-size: 15px; color: #1f2937; padding: 8px; margin-bottom: 16px;">
+            FULL CORRELATION RESULTS
+        </div>
         <div style="padding: 16px 0;">`;
 
             // Use restructured correlations with nesting
@@ -4433,10 +4715,10 @@ th {
             
             Object.entries(restructured).forEach(([mainCurrency, data]) => {
                 html += `
-        <details style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #0a0a0a;">
-            <summary style="cursor: pointer; font-weight: 600; color: #ffffff; margin-bottom: 12px;">
-                ▶ ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)
-            </summary>
+        <div style="margin: 16px 0; border-left: 3px solid #06b6d4; padding-left: 16px; background: #f9fafb; padding: 16px;">
+            <div style="font-weight: 600; color: #1f2937; margin-bottom: 12px; font-size: 14px;">
+                ${mainCurrency} CORRELATIONS (${data.allCorrelations.length} total)
+            </div>
             <div>`;
 
                 // Nested groups
@@ -4492,26 +4774,25 @@ th {
                     const subAvgReal = corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.realizedCorr, 0) / corrArray.length : 0;
                     const subAvgDiff = corrArray.length > 0 ? corrArray.reduce((sum, c) => sum + c.difference, 0) / corrArray.length : 0;
 
-                    const subAvgImplBg = getCellColor(subAvgImpl, scales.impliedCorr);
-                    const subAvgRealBg = getCellColor(subAvgReal, scales.realizedCorr);
-                    const subAvgDiffBg = getCellColor(subAvgDiff, scales.corrDiff);
+                    const subAvgImplBg = getEmailCellColor(subAvgImpl, scales.impliedCorr);
+                    const subAvgRealBg = getEmailCellColor(subAvgReal, scales.realizedCorr);
+                    const subAvgDiffBg = getEmailCellColor(subAvgDiff, scales.corrDiff);
 
-                    const subAvgImplText = getTextColorForBackground(subAvgImplBg);
-                    const subAvgRealText = getTextColorForBackground(subAvgRealBg);
-                    const subAvgDiffText = getTextColorForBackground(subAvgDiffBg);
+                    // Email always uses dark text on light backgrounds
+                    const emailTextColor = '#1f2937';
 
                     html += `
                         </tbody>
                         <tfoot>
-                            <tr style="border-top: 2px solid #06b6d4; background: #1a1a1a; font-weight: 600;">
-                                <td colspan="2" style="padding: 10px; color: #06b6d4;">SUB-GROUP AVERAGE (${corrArray.length})</td>
-                                <td style="padding: 10px; text-align: right; background-color: ${subAvgImplBg}; color: ${subAvgImplText};">
+                            <tr style="border-top: 2px solid #06b6d4; background: #f3f4f6; font-weight: 600;">
+                                <td colspan="2" style="padding: 10px; color: #1f2937;">SUB-GROUP AVERAGE (${corrArray.length})</td>
+                                <td style="padding: 10px; text-align: right; background-color: ${subAvgImplBg}; color: ${emailTextColor};">
                                     ${formatCorrInteger(subAvgImpl)}
                                 </td>
-                                <td style="padding: 10px; text-align: right; background-color: ${subAvgRealBg}; color: ${subAvgRealText};">
+                                <td style="padding: 10px; text-align: right; background-color: ${subAvgRealBg}; color: ${emailTextColor};">
                                     ${formatCorrInteger(subAvgReal)}
                                 </td>
-                                <td style="padding: 10px; text-align: right; background-color: ${subAvgDiffBg}; color: ${subAvgDiffText};">
+                                <td style="padding: 10px; text-align: right; background-color: ${subAvgDiffBg}; color: ${emailTextColor};">
                                     ${subAvgDiff >= 0 ? '+' : ''}${formatCorrInteger(subAvgDiff)}
                                 </td>
                             </tr>
@@ -4527,42 +4808,41 @@ th {
                 const overallAvgReal = uniqueCorrelations.reduce((sum, c) => sum + c.realizedCorr, 0) / uniqueCorrelations.length;
                 const overallAvgDiff = uniqueCorrelations.reduce((sum, c) => sum + c.difference, 0) / uniqueCorrelations.length;
 
-                const overallImplBg = getCellColor(overallAvgImpl, scales.impliedCorr);
-                const overallRealBg = getCellColor(overallAvgReal, scales.realizedCorr);
-                const overallDiffBg = getCellColor(overallAvgDiff, scales.corrDiff);
+                const overallImplBg = getEmailCellColor(overallAvgImpl, scales.impliedCorr);
+                const overallRealBg = getEmailCellColor(overallAvgReal, scales.realizedCorr);
+                const overallDiffBg = getEmailCellColor(overallAvgDiff, scales.corrDiff);
 
-                const overallImplText = getTextColorForBackground(overallImplBg);
-                const overallRealText = getTextColorForBackground(overallRealBg);
-                const overallDiffText = getTextColorForBackground(overallDiffBg);
+                // Email always uses dark text on light backgrounds
+                const emailTextColor = '#1f2937';
 
                 html += `
-            <div style="margin-top: 20px; padding: 16px; background: #141414; border-left: 3px solid #06b6d4; border-radius: 4px;">
-                <div style="font-weight: 700; margin-bottom: 12px; color: #06b6d4;">
+            <div style="margin-top: 20px; padding: 16px; background: #f3f4f6; border-left: 3px solid #06b6d4; border-radius: 4px;">
+                <div style="font-weight: 700; margin-bottom: 12px; color: #1f2937;">
                     ${mainCurrency} OVERALL AVERAGE (${uniqueCorrelations.length} unique correlations)
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
                     <tr>
-                        <td style="padding: 8px; text-align: center; background-color: ${overallImplBg}; color: ${overallImplText}; font-weight: 600; border-radius: 4px;">
+                        <td style="padding: 8px; text-align: center; background-color: ${overallImplBg}; color: ${emailTextColor}; font-weight: 600; border-radius: 4px;">
                             Impl: ${formatCorrInteger(overallAvgImpl)}
                         </td>
                         <td style="width: 8px;"></td>
-                        <td style="padding: 8px; text-align: center; background-color: ${overallRealBg}; color: ${overallRealText}; font-weight: 600; border-radius: 4px;">
+                        <td style="padding: 8px; text-align: center; background-color: ${overallRealBg}; color: ${emailTextColor}; font-weight: 600; border-radius: 4px;">
                             Real: ${formatCorrInteger(overallAvgReal)}
                         </td>
                         <td style="width: 8px;"></td>
-                        <td style="padding: 8px; text-align: center; background-color: ${overallDiffBg}; color: ${overallDiffText}; font-weight: 600; border-radius: 4px;">
+                        <td style="padding: 8px; text-align: center; background-color: ${overallDiffBg}; color: ${emailTextColor}; font-weight: 600; border-radius: 4px;">
                             Diff: ${overallAvgDiff >= 0 ? '+' : ''}${formatCorrInteger(overallAvgDiff)}
                         </td>
                     </tr>
                 </table>
             </div>
             </div>
-        </details>`;
+        </div>`;
             });
 
             html += `
         </div>
-    </details>
+    </div>
 </div>`;
 
             return html;
@@ -4616,29 +4896,78 @@ ${generateExpandableFullResults(window.batchAnalysisResults, window.correlationA
         }
 
         async function copyEmailReport() {
+            const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('exportStatus');
+            
             try {
                 const emailHTML = generateEmailReport();
                 const plainText = stripHTMLTags(emailHTML);
 
-                await navigator.clipboard.write([
-                    new ClipboardItem({
-                        'text/html': new Blob([emailHTML], { type: 'text/html' }),
-                        'text/plain': new Blob([plainText], { type: 'text/plain' })
-                    })
-                ]);
+                // Try modern ClipboardItem API first (Chrome, Edge, newer browsers)
+                if (navigator.clipboard && window.ClipboardItem) {
+                    try {
+                        const htmlBlob = new Blob([emailHTML], { type: 'text/html' });
+                        const textBlob = new Blob([plainText], { type: 'text/plain' });
+                        
+                        const clipboardItem = new ClipboardItem({
+                            'text/html': htmlBlob,
+                            'text/plain': textBlob
+                        });
+                        
+                        await navigator.clipboard.write([clipboardItem]);
+                        
+                        if (statusEl) {
+                            statusEl.innerHTML = '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
+                            statusEl.style.color = 'var(--green)';
+                            setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
+                        }
+                        return;
+                    } catch (clipboardError) {
+                        console.warn('ClipboardItem API failed, trying fallback:', clipboardError);
+                        // Fall through to fallback method
+                    }
+                }
 
-                const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('exportStatus');
-                if (statusEl) {
-                    statusEl.innerHTML = '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
-                    statusEl.style.color = 'var(--green)';
-                    setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
+                // Fallback: Create a temporary div with the HTML content
+                const div = document.createElement('div');
+                div.contentEditable = true;
+                div.innerHTML = emailHTML;
+                div.style.position = 'fixed';
+                div.style.left = '-9999px';
+                div.style.top = '0';
+                document.body.appendChild(div);
+                
+                const range = document.createRange();
+                range.selectNodeContents(div);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                
+                try {
+                    const successful = document.execCommand('copy');
+                    selection.removeAllRanges();
+                    document.body.removeChild(div);
+                    
+                    if (successful) {
+                        if (statusEl) {
+                            statusEl.innerHTML = '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
+                            statusEl.style.color = 'var(--green)';
+                            setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
+                        }
+                    } else {
+                        throw new Error('execCommand copy failed');
+                    }
+                } catch (execError) {
+                    selection.removeAllRanges();
+                    if (document.body.contains(div)) {
+                        document.body.removeChild(div);
+                    }
+                    throw execError;
                 }
 
             } catch (error) {
                 console.error('Copy failed:', error);
-                const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('exportStatus');
                 if (statusEl) {
-                    statusEl.innerHTML = '✗ Copy failed. Please try again or use a different browser.';
+                    statusEl.innerHTML = '✗ Copy failed. Try Chrome/Edge or right-click and copy. Error: ' + (error.message || error.toString());
                     statusEl.style.color = 'var(--red)';
                 }
             }
