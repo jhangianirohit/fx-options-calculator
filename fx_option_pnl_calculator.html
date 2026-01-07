@@ -2535,9 +2535,16 @@ th {
         }
 
         function calculateImpliedCorrelation(pair1, pair2, crossPair, impliedVols) {
-            const vol1 = impliedVols[pair1];
-            const vol2 = impliedVols[pair2];
-            const volCross = impliedVols[crossPair];
+            let vol1 = impliedVols[pair1];
+            let vol2 = impliedVols[pair2];
+            let volCross = impliedVols[crossPair];
+
+            // If cross pair not found, try inverse (volatility is symmetric)
+            if (volCross === undefined || volCross === null) {
+                const { base, quote } = parseCrossPair(crossPair);
+                const inverseCrossPair = quote + base;
+                volCross = impliedVols[inverseCrossPair];
+            }
 
             if (vol1 === undefined || vol1 === null || vol2 === undefined || vol2 === null || volCross === undefined || volCross === null) {
                 return null; // Missing data
@@ -2551,9 +2558,16 @@ th {
         }
 
         function calculateRealizedCorrelation(pair1, pair2, crossPair, realizedVols) {
-            const vol1 = realizedVols[pair1];
-            const vol2 = realizedVols[pair2];
-            const volCross = realizedVols[crossPair];
+            let vol1 = realizedVols[pair1];
+            let vol2 = realizedVols[pair2];
+            let volCross = realizedVols[crossPair];
+
+            // If cross pair not found, try inverse (volatility is symmetric)
+            if (volCross === undefined || volCross === null) {
+                const { base, quote } = parseCrossPair(crossPair);
+                const inverseCrossPair = quote + base;
+                volCross = realizedVols[inverseCrossPair];
+            }
 
             // Check for null/undefined, but allow 0 (zero volatility is valid)
             if (vol1 === undefined || vol1 === null || vol2 === undefined || vol2 === null || volCross === undefined || volCross === null) {
@@ -2832,6 +2846,516 @@ th {
             const percent = Math.round(difference * 100);
             const sign = percent > 0 ? '+' : '';
             return `${sign}${percent}%`;
+        }
+
+        /**
+         * Generate display for correlation matrix via intermediates
+         * Shows ALL possible pairs (rows) vs intermediate currencies (columns)
+         * Rows are sorted by currency groups (USD pairs first, then EUR pairs, etc.)
+         * For 8 currencies: 8*7 = 56 pairs (exhaustive list)
+         */
+        function generateCorrelationMatrixDisplay(correlationMatrix, currencies = []) {
+            if (!correlationMatrix || Object.keys(correlationMatrix).length === 0) {
+                return '<div class="info-box"><p>No correlation matrix data available.</p></div>';
+            }
+            
+            // Get all available currencies - use provided currencies or extract from matrix
+            let allCurrencies;
+            if (currencies && currencies.length > 0) {
+                allCurrencies = new Set(currencies);
+            } else {
+                // Fallback: extract from matrix
+                allCurrencies = new Set();
+                Object.keys(correlationMatrix).forEach(pair => {
+                    allCurrencies.add(pair.substring(0, 3));
+                    allCurrencies.add(pair.substring(3, 6));
+                });
+            }
+            
+            // Get all intermediate currencies
+            const allIntermediates = new Set();
+            Object.keys(correlationMatrix).forEach(pair => {
+                if (correlationMatrix[pair].viaIntermediates) {
+                    Object.keys(correlationMatrix[pair].viaIntermediates).forEach(intermediate => {
+                        allIntermediates.add(intermediate);
+                    });
+                }
+            });
+            
+            const intermediates = Array.from(allIntermediates).sort((a, b) => {
+                return getCurrencyPrecedence(a) - getCurrencyPrecedence(b);
+            });
+            
+            if (intermediates.length === 0) {
+                return '<div class="info-box"><p>No intermediate currency data available.</p></div>';
+            }
+            
+            // Fixed currency order: USD, EUR, GBP, CHF, JPY, AUD, NZD, CAD
+            const currencyOrder = ['USD', 'EUR', 'GBP', 'CHF', 'JPY', 'AUD', 'NZD', 'CAD'];
+            const currencyOrderMap = {};
+            currencyOrder.forEach((ccy, idx) => {
+                currencyOrderMap[ccy] = idx;
+            });
+            
+            // Function to get currency precedence (use fixed order if available, otherwise use existing function)
+            function getCurrencyOrder(currency) {
+                if (currencyOrderMap.hasOwnProperty(currency)) {
+                    return currencyOrderMap[currency];
+                }
+                return getCurrencyPrecedence(currency) + 1000; // Put unknown currencies after known ones
+            }
+            
+            // Generate ALL possible pairs from available currencies (exhaustive list)
+            // For 8 currencies: 8 * 7 = 56 pairs
+            // Order currencies by fixed order
+            const currenciesList = Array.from(allCurrencies).sort((a, b) => {
+                return getCurrencyOrder(a) - getCurrencyOrder(b);
+            });
+            
+            const allPossiblePairs = [];
+            currenciesList.forEach(baseCurrency => {
+                currenciesList.forEach(quoteCurrency => {
+                    if (baseCurrency !== quoteCurrency) {
+                        allPossiblePairs.push(baseCurrency + quoteCurrency);
+                    }
+                });
+            });
+            
+            // Sort pairs by currency groups (base currency first, then by quote currency)
+            // Group by base currency, then sort within groups by quote currency order
+            const pairsByCurrency = {};
+            allPossiblePairs.forEach(pair => {
+                const baseCurrency = pair.substring(0, 3);
+                if (!pairsByCurrency[baseCurrency]) {
+                    pairsByCurrency[baseCurrency] = [];
+                }
+                pairsByCurrency[baseCurrency].push(pair);
+            });
+            
+            // Sort currencies by fixed order
+            const sortedCurrencies = Object.keys(pairsByCurrency).sort((a, b) => {
+                return getCurrencyOrder(a) - getCurrencyOrder(b);
+            });
+            
+            const sortedPairs = [];
+            sortedCurrencies.forEach((currency, idx) => {
+                // Sort pairs within each group by quote currency order
+                const pairs = pairsByCurrency[currency].sort((a, b) => {
+                    const quoteA = a.substring(3, 6);
+                    const quoteB = b.substring(3, 6);
+                    return getCurrencyOrder(quoteA) - getCurrencyOrder(quoteB);
+                });
+                sortedPairs.push(...pairs);
+                // Add separator after each currency group (except the last one)
+                if (idx < sortedCurrencies.length - 1) {
+                    sortedPairs.push({ isSeparator: true });
+                }
+            });
+            
+            // Calculate scales for color coding (only from pairs that have data)
+            const scales = {
+                impliedCorr: { min: Infinity, max: -Infinity },
+                realizedCorr: { min: Infinity, max: -Infinity },
+                corrDiff: { min: Infinity, max: -Infinity }
+            };
+            
+            allPossiblePairs.forEach(pair => {
+                if (correlationMatrix[pair] && correlationMatrix[pair].viaIntermediates) {
+                    Object.values(correlationMatrix[pair].viaIntermediates).forEach(data => {
+                        scales.impliedCorr.min = Math.min(scales.impliedCorr.min, data.impliedCorr);
+                        scales.impliedCorr.max = Math.max(scales.impliedCorr.max, data.impliedCorr);
+                        scales.realizedCorr.min = Math.min(scales.realizedCorr.min, data.realizedCorr);
+                        scales.realizedCorr.max = Math.max(scales.realizedCorr.max, data.realizedCorr);
+                        scales.corrDiff.min = Math.min(scales.corrDiff.min, data.difference);
+                        scales.corrDiff.max = Math.max(scales.corrDiff.max, data.difference);
+                    });
+                }
+            });
+            
+            // Calculate row averages for each pair
+            const rowAverages = {};
+            allPossiblePairs.forEach(pair => {
+                let sumImpl = 0, sumReal = 0, sumDiff = 0, count = 0;
+                
+                intermediates.forEach(intermediate => {
+                    const data = correlationMatrix[pair]?.viaIntermediates?.[intermediate];
+                    if (data) {
+                        sumImpl += data.impliedCorr;
+                        sumReal += data.realizedCorr;
+                        sumDiff += data.difference;
+                        count++;
+                    }
+                });
+                
+                if (count > 0) {
+                    rowAverages[pair] = {
+                        impliedCorr: sumImpl / count,
+                        realizedCorr: sumReal / count,
+                        difference: sumDiff / count,
+                        count: count
+                    };
+                }
+            });
+            
+            // Calculate averages across intermediates
+            const intermediateAverages = {};
+            intermediates.forEach(intermediate => {
+                let sumImpl = 0, sumReal = 0, sumDiff = 0, count = 0;
+                
+                allPossiblePairs.forEach(pair => {
+                    const data = correlationMatrix[pair]?.viaIntermediates?.[intermediate];
+                    if (data) {
+                        sumImpl += data.impliedCorr;
+                        sumReal += data.realizedCorr;
+                        sumDiff += data.difference;
+                        count++;
+                    }
+                });
+                
+                if (count > 0) {
+                    intermediateAverages[intermediate] = {
+                        impliedCorr: sumImpl / count,
+                        realizedCorr: sumReal / count,
+                        difference: sumDiff / count,
+                        count: count
+                    };
+                }
+            });
+            
+            // Build table HTML
+            let html = `
+            <div class="card" style="overflow-x: auto;">
+                <div style="margin-bottom: 16px;">
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">
+                        Shows correlations of all pairs calculated via different intermediate currencies.
+                        Each cell shows: Implied Corr | Realized Corr | Difference
+                    </p>
+                    <p style="color: var(--text-secondary); font-size: 12px;">
+                        Rows are grouped by base currency (USD pairs first, then EUR pairs, etc.). Rightmost column shows average across all intermediates.
+                    </p>
+                </div>
+                <table class="data-table" style="min-width: 800px; font-size: 12px;">
+                    <thead>
+                        <tr>
+                            <th style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 10; padding: 12px; text-align: left; border-right: 2px solid var(--border);">Pair</th>`;
+            
+            // Header row with intermediate currencies
+            intermediates.forEach(intermediate => {
+                html += `
+                            <th style="padding: 12px; text-align: center; min-width: 180px; background: var(--bg-elevated);">
+                                <div style="font-weight: 600; margin-bottom: 4px;">Via ${intermediate}</div>
+                                <div style="font-size: 10px; color: var(--text-muted); font-weight: normal;">Impl | Real | Diff</div>
+                            </th>`;
+            });
+            
+            // Add average column header
+            html += `
+                            <th style="padding: 12px; text-align: center; min-width: 180px; background: var(--bg-elevated); border-left: 2px solid var(--border);">
+                                <div style="font-weight: 600; margin-bottom: 4px;">AVERAGE</div>
+                                <div style="font-size: 10px; color: var(--text-muted); font-weight: normal;">Impl | Real | Diff</div>
+                            </th>`;
+            
+            html += `
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            // Data rows
+            sortedPairs.forEach((pair, idx) => {
+                // Check if this is a separator
+                if (pair && typeof pair === 'object' && pair.isSeparator) {
+                    // Add a simple dividing line
+                    html += `
+                        <tr>
+                            <td colspan="${intermediates.length + 2}" style="padding: 0; border-top: 2px solid var(--border-strong);"></td>
+                        </tr>`;
+                    return;
+                }
+                
+                // Regular data row
+                html += `
+                        <tr>
+                            <td style="position: sticky; left: 0; background: var(--bg-main); z-index: 9; padding: 12px; font-weight: 600; border-right: 2px solid var(--border);">${pair}</td>`;
+                
+                intermediates.forEach(intermediate => {
+                    const data = correlationMatrix[pair]?.viaIntermediates?.[intermediate];
+                    
+                    if (data) {
+                        const implBgColor = getCellColor(data.impliedCorr, scales.impliedCorr);
+                        const realBgColor = getCellColor(data.realizedCorr, scales.realizedCorr);
+                        const diffBgColor = getCellColor(data.difference, scales.corrDiff);
+                        
+                        const implTextColor = getTextColorForBackground(implBgColor);
+                        const realTextColor = getTextColorForBackground(realBgColor);
+                        const diffTextColor = getTextColorForBackground(diffBgColor);
+                        
+                        html += `
+                            <td style="padding: 8px; text-align: center;">
+                                <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 500; font-size: 11px;">
+                                        ${formatCorrInteger(data.impliedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 500; font-size: 11px;">
+                                        ${formatCorrInteger(data.realizedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 600; font-size: 11px;">
+                                        ${data.difference >= 0 ? '+' : ''}${formatCorrInteger(data.difference)}
+                                    </span>
+                                </div>
+                            </td>`;
+                    } else {
+                        html += `
+                            <td style="padding: 8px; text-align: center; color: var(--text-muted);">—</td>`;
+                    }
+                });
+                
+                // Add row average
+                const rowAvg = rowAverages[pair];
+                if (rowAvg) {
+                    const implBgColor = getCellColor(rowAvg.impliedCorr, scales.impliedCorr);
+                    const realBgColor = getCellColor(rowAvg.realizedCorr, scales.realizedCorr);
+                    const diffBgColor = getCellColor(rowAvg.difference, scales.corrDiff);
+                    
+                    const implTextColor = getTextColorForBackground(implBgColor);
+                    const realTextColor = getTextColorForBackground(realBgColor);
+                    const diffTextColor = getTextColorForBackground(diffBgColor);
+                    
+                    html += `
+                            <td style="padding: 8px; text-align: center; border-left: 2px solid var(--border); font-weight: 600;">
+                                <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 600; font-size: 11px;">
+                                        ${formatCorrInteger(rowAvg.impliedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 600; font-size: 11px;">
+                                        ${formatCorrInteger(rowAvg.realizedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 700; font-size: 11px;">
+                                        ${rowAvg.difference >= 0 ? '+' : ''}${formatCorrInteger(rowAvg.difference)}
+                                    </span>
+                                </div>
+                            </td>`;
+                } else {
+                    html += `
+                            <td style="padding: 8px; text-align: center; color: var(--text-muted); border-left: 2px solid var(--border);">—</td>`;
+                }
+                
+                html += `
+                        </tr>`;
+            });
+            
+            // Average row (column averages)
+            html += `
+                    </tbody>
+                    <tfoot>
+                        <tr style="border-top: 2px solid var(--cyan); background: var(--bg-elevated);">
+                            <td style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 9; padding: 12px; font-weight: 700; color: var(--cyan); border-right: 2px solid var(--border);">AVERAGE</td>`;
+            
+            intermediates.forEach(intermediate => {
+                const avg = intermediateAverages[intermediate];
+                if (avg) {
+                    const implBgColor = getCellColor(avg.impliedCorr, scales.impliedCorr);
+                    const realBgColor = getCellColor(avg.realizedCorr, scales.realizedCorr);
+                    const diffBgColor = getCellColor(avg.difference, scales.corrDiff);
+                    
+                    const implTextColor = getTextColorForBackground(implBgColor);
+                    const realTextColor = getTextColorForBackground(realBgColor);
+                    const diffTextColor = getTextColorForBackground(diffBgColor);
+                    
+                    html += `
+                            <td style="padding: 8px; text-align: center; font-weight: 600;">
+                                <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${implBgColor}; color: ${implTextColor}; font-size: 11px;">
+                                        ${formatCorrInteger(avg.impliedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${realBgColor}; color: ${realTextColor}; font-size: 11px;">
+                                        ${formatCorrInteger(avg.realizedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-size: 11px;">
+                                        ${avg.difference >= 0 ? '+' : ''}${formatCorrInteger(avg.difference)}
+                                    </span>
+                                </div>
+                            </td>`;
+                } else {
+                    html += `
+                            <td style="padding: 8px; text-align: center; color: var(--text-muted);">—</td>`;
+                }
+            });
+            
+            // Average of averages (grand average in the rightmost column)
+            let grandSumImpl = 0, grandSumReal = 0, grandSumDiff = 0, grandCount = 0;
+            Object.values(rowAverages).forEach(avg => {
+                grandSumImpl += avg.impliedCorr;
+                grandSumReal += avg.realizedCorr;
+                grandSumDiff += avg.difference;
+                grandCount++;
+            });
+            
+            if (grandCount > 0) {
+                const grandAvg = {
+                    impliedCorr: grandSumImpl / grandCount,
+                    realizedCorr: grandSumReal / grandCount,
+                    difference: grandSumDiff / grandCount
+                };
+                
+                const implBgColor = getCellColor(grandAvg.impliedCorr, scales.impliedCorr);
+                const realBgColor = getCellColor(grandAvg.realizedCorr, scales.realizedCorr);
+                const diffBgColor = getCellColor(grandAvg.difference, scales.corrDiff);
+                
+                const implTextColor = getTextColorForBackground(implBgColor);
+                const realTextColor = getTextColorForBackground(realBgColor);
+                const diffTextColor = getTextColorForBackground(diffBgColor);
+                
+                html += `
+                            <td style="padding: 8px; text-align: center; font-weight: 700; border-left: 2px solid var(--border);">
+                                <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${implBgColor}; color: ${implTextColor}; font-size: 11px;">
+                                        ${formatCorrInteger(grandAvg.impliedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${realBgColor}; color: ${realTextColor}; font-size: 11px;">
+                                        ${formatCorrInteger(grandAvg.realizedCorr)}
+                                    </span>
+                                    <span style="padding: 4px 8px; border-radius: 4px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-size: 11px;">
+                                        ${grandAvg.difference >= 0 ? '+' : ''}${formatCorrInteger(grandAvg.difference)}
+                                    </span>
+                                </div>
+                            </td>`;
+            } else {
+                html += `
+                            <td style="padding: 8px; text-align: center; color: var(--text-muted); border-left: 2px solid var(--border);">—</td>`;
+            }
+            
+            html += `
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>`;
+            
+            return html;
+        }
+
+        // ============ CORRELATION MATRIX VIA INTERMEDIATE CURRENCIES ============
+        
+        /**
+         * Calculate correlation matrix showing correlations of cross pairs via different intermediate currencies
+         * For example: NZD/CHF via USD = correlation(USD/NZD, USD/CHF)
+         * Normalization: Always use INTERMEDIATE/CURRENCY format (e.g., USD/NZD, USD/CHF)
+         */
+        function calculateCorrelationMatrixViaIntermediates(analyzedPairs, currencies, impliedVols, realizedVols) {
+            const matrix = {};
+            
+            // Generate ALL possible pairs from available currencies (both directions)
+            // For 8 currencies, this gives 8*7 = 56 pairs
+            const allPossiblePairs = [];
+            currencies.forEach(baseCurrency => {
+                currencies.forEach(quoteCurrency => {
+                    if (baseCurrency !== quoteCurrency) {
+                        const pair = baseCurrency + quoteCurrency;
+                        allPossiblePairs.push(pair);
+                    }
+                });
+            });
+            
+            console.log('Calculating correlation matrix via intermediates...');
+            console.log('All possible pairs:', allPossiblePairs.length, 'pairs from', currencies.length, 'currencies');
+            console.log('Available intermediates:', currencies);
+            
+            // For each possible pair
+            allPossiblePairs.forEach(pair => {
+                const { base, quote } = parseCrossPair(pair);
+                const pairData = {
+                    pair: pair,
+                    base: base,
+                    quote: quote,
+                    viaIntermediates: {}
+                };
+                
+                // For each intermediate currency
+                currencies.forEach(intermediate => {
+                    // Skip if intermediate is one of the currencies in the pair
+                    if (intermediate === base || intermediate === quote) {
+                        return;
+                    }
+                    
+                    // Get normalized pairs: INTERMEDIATE/BASE and INTERMEDIATE/QUOTE
+                    const pair1Normalized = getNormalizedPairForIntermediate(base, intermediate, analyzedPairs);
+                    const pair2Normalized = getNormalizedPairForIntermediate(quote, intermediate, analyzedPairs);
+                    
+                    if (!pair1Normalized || !pair2Normalized) {
+                        // Missing data for this intermediate
+                        return;
+                    }
+                    
+                    // For the cross pair itself, check if we need to use inverse
+                    // e.g., if we need USDGBP but only have GBPUSD, use GBPUSD (inverted)
+                    let crossPairForCalc = pair;
+                    let crossPairInverted = false;
+                    if (!impliedVols[pair] && !realizedVols[pair]) {
+                        // Try inverse
+                        const inversePair = quote + base;
+                        if (impliedVols[inversePair] || realizedVols[inversePair]) {
+                            crossPairForCalc = inversePair;
+                            crossPairInverted = true;
+                        }
+                    }
+                    
+                    // Calculate implied correlation
+                    const impliedCorr = calculateImpliedCorrelation(
+                        pair1Normalized.pair,
+                        pair2Normalized.pair,
+                        crossPairForCalc,
+                        impliedVols
+                    );
+                    
+                    // Calculate realized correlation
+                    const realizedCorr = calculateRealizedCorrelation(
+                        pair1Normalized.pair,
+                        pair2Normalized.pair,
+                        crossPairForCalc,
+                        realizedVols
+                    );
+                    
+                    if (impliedCorr !== null && realizedCorr !== null) {
+                        pairData.viaIntermediates[intermediate] = {
+                            pair1: pair1Normalized.pair,
+                            pair2: pair2Normalized.pair,
+                            pair1Inverted: pair1Normalized.inverted,
+                            pair2Inverted: pair2Normalized.inverted,
+                            impliedCorr: impliedCorr,
+                            realizedCorr: realizedCorr,
+                            difference: realizedCorr - impliedCorr
+                        };
+                    }
+                });
+                
+                // Include pair in matrix even if no data (will show dashes)
+                matrix[pair] = pairData;
+            });
+            
+            console.log('Correlation matrix calculated:', Object.keys(matrix).length, 'pairs');
+            return matrix;
+        }
+        
+        /**
+         * Get normalized pair for intermediate currency
+         * For correlation via intermediate, we need INTERMEDIATE/CURRENCY format
+         * Returns the actual pair name found (volatility is symmetric, so no inversion needed)
+         */
+        function getNormalizedPairForIntermediate(currency, intermediate, analyzedPairs) {
+            // Try direct: INTERMEDIATE/CURRENCY (e.g., USDNZD for USD/NZD)
+            const directPair = intermediate + currency;
+            if (analyzedPairs.includes(directPair)) {
+                return { pair: directPair, normalized: directPair };
+            }
+            
+            // Try inverted: CURRENCY/INTERMEDIATE (e.g., NZDUSD for NZD/USD)
+            // For correlation, vol(NZD/USD) = vol(USD/NZD), so we can use it directly
+            const invertedPair = currency + intermediate;
+            if (analyzedPairs.includes(invertedPair)) {
+                return { pair: invertedPair, normalized: directPair }; // Return actual pair, but note normalized form
+            }
+            
+            // Not found
+            return null;
         }
 
         function detectFrequency(timestamps) {
@@ -3646,7 +4170,22 @@ th {
                         realizedVols, // realized vols (including cross pairs)
                         selectedGroups // selected currency groups
                     );
+                    
+                    // Calculate correlation matrix via intermediates
+                    const correlationMatrix = calculateCorrelationMatrixViaIntermediates(
+                        analyzedPairs,
+                        batchData.currencies,
+                        batchData.impliedVols,
+                        realizedVols
+                    );
+                    
+                    // Store globally for display and email
+                    window.correlationMatrix = correlationMatrix;
+                } else {
+                    window.correlationMatrix = null;
                 }
+            } else {
+                window.correlationMatrix = null;
             }
 
             // Display results with tabs
@@ -3941,6 +4480,190 @@ th {
 
         function formatCorrInteger(corr) {
             return Math.round(corr * 100) + '%';
+        }
+
+        /**
+         * Generate email version of correlation matrix via intermediates
+         */
+        function generateEmailCorrelationMatrix(correlationMatrix, scales) {
+            if (!correlationMatrix || Object.keys(correlationMatrix).length === 0) {
+                return '';
+            }
+            
+            const crossPairs = Object.keys(correlationMatrix).sort();
+            const allIntermediates = new Set();
+            
+            crossPairs.forEach(crossPair => {
+                Object.keys(correlationMatrix[crossPair].viaIntermediates).forEach(intermediate => {
+                    allIntermediates.add(intermediate);
+                });
+            });
+            
+            const intermediates = Array.from(allIntermediates).sort((a, b) => {
+                return getCurrencyPrecedence(a) - getCurrencyPrecedence(b);
+            });
+            
+            if (intermediates.length === 0) {
+                return '';
+            }
+            
+            const corrScales = {
+                impliedCorr: scales.impliedCorr || { min: -1, max: 1 },
+                realizedCorr: scales.realizedCorr || { min: -1, max: 1 },
+                corrDiff: scales.corrDiff || { min: -1, max: 1 }
+            };
+            
+            const bestIntermediates = {};
+            crossPairs.forEach(crossPair => {
+                let bestIntermediate = null;
+                let bestDiff = -Infinity;
+                
+                Object.entries(correlationMatrix[crossPair].viaIntermediates).forEach(([intermediate, data]) => {
+                    if (data.difference > bestDiff) {
+                        bestDiff = data.difference;
+                        bestIntermediate = intermediate;
+                    }
+                });
+                
+                if (bestIntermediate) {
+                    bestIntermediates[crossPair] = bestIntermediate;
+                }
+            });
+            
+            const intermediateAverages = {};
+            intermediates.forEach(intermediate => {
+                let sumImpl = 0, sumReal = 0, sumDiff = 0, count = 0;
+                
+                crossPairs.forEach(crossPair => {
+                    const data = correlationMatrix[crossPair].viaIntermediates[intermediate];
+                    if (data) {
+                        sumImpl += data.impliedCorr;
+                        sumReal += data.realizedCorr;
+                        sumDiff += data.difference;
+                        count++;
+                    }
+                });
+                
+                if (count > 0) {
+                    intermediateAverages[intermediate] = {
+                        impliedCorr: sumImpl / count,
+                        realizedCorr: sumReal / count,
+                        difference: sumDiff / count,
+                        count: count
+                    };
+                }
+            });
+            
+            let html = `
+<div style="margin-top: 48px; margin-bottom: 32px;">
+    <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
+        CORRELATION MATRIX VIA INTERMEDIATE CURRENCIES
+    </h3>
+    <p style="font-size: 13px; color: #6b7280; margin-bottom: 16px;">
+        Shows correlations of cross pairs calculated via different intermediate currencies. Each cell shows: Implied Corr | Realized Corr | Difference. Best intermediate for each pair is highlighted.
+    </p>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 11px; min-width: 1000px; background-color: #ffffff;">
+            <thead>
+                <tr style="border-bottom: 2px solid #e5e7eb; background: #f9fafb;">
+                    <th style="padding: 10px; text-align: left; background-color: #f9fafb; position: sticky; left: 0; z-index: 10; border-right: 2px solid #e5e7eb;">Cross Pair</th>`;
+            
+            intermediates.forEach(intermediate => {
+                html += `
+                    <th style="padding: 10px; text-align: center; background-color: #f9fafb; min-width: 200px;">
+                        <div style="font-weight: 600; margin-bottom: 4px;">Via ${intermediate}</div>
+                        <div style="font-size: 9px; color: #6b7280; font-weight: normal;">Impl | Real | Diff</div>
+                    </th>`;
+            });
+            
+            html += `
+                </tr>
+            </thead>
+            <tbody>`;
+            
+            crossPairs.forEach(crossPair => {
+                const bestIntermediate = bestIntermediates[crossPair];
+                html += `
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                    <td style="padding: 10px; font-weight: 600; position: sticky; left: 0; background-color: #ffffff; z-index: 9; border-right: 2px solid #e5e7eb;">${crossPair}</td>`;
+                
+                intermediates.forEach(intermediate => {
+                    const data = correlationMatrix[crossPair].viaIntermediates[intermediate];
+                    const isBest = bestIntermediate === intermediate;
+                    const emailTextColor = '#1f2937';
+                    
+                    if (data) {
+                        const implBgColor = getEmailCellColor(data.impliedCorr, corrScales.impliedCorr);
+                        const realBgColor = getEmailCellColor(data.realizedCorr, corrScales.realizedCorr);
+                        const diffBgColor = getEmailCellColor(data.difference, corrScales.corrDiff);
+                        
+                        html += `
+                    <td style="padding: 8px; text-align: center; ${isBest ? 'border: 2px solid #06b6d4;' : ''}">
+                        <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                            <span style="padding: 3px 6px; border-radius: 3px; background-color: ${implBgColor}; color: ${emailTextColor}; font-weight: 500; font-size: 10px;">
+                                ${formatCorrInteger(data.impliedCorr)}
+                            </span>
+                            <span style="padding: 3px 6px; border-radius: 3px; background-color: ${realBgColor}; color: ${emailTextColor}; font-weight: 500; font-size: 10px;">
+                                ${formatCorrInteger(data.realizedCorr)}
+                            </span>
+                            <span style="padding: 3px 6px; border-radius: 3px; background-color: ${diffBgColor}; color: ${emailTextColor}; font-weight: 600; font-size: 10px;">
+                                ${data.difference >= 0 ? '+' : ''}${formatCorrInteger(data.difference)}
+                            </span>
+                        </div>
+                    </td>`;
+                    } else {
+                        html += `
+                    <td style="padding: 8px; text-align: center; color: #9ca3af;">—</td>`;
+                    }
+                });
+                
+                html += `
+                </tr>`;
+            });
+            
+            html += `
+            </tbody>
+            <tfoot>
+                <tr style="border-top: 2px solid #06b6d4; background: #f3f4f6; font-weight: 700;">
+                    <td style="padding: 10px; font-weight: 700; color: #1f2937; position: sticky; left: 0; background-color: #f3f4f6; z-index: 9; border-right: 2px solid #e5e7eb;">AVERAGE</td>`;
+            
+            intermediates.forEach(intermediate => {
+                const avg = intermediateAverages[intermediate];
+                const emailTextColor = '#1f2937';
+                
+                if (avg) {
+                    const implBgColor = getEmailCellColor(avg.impliedCorr, corrScales.impliedCorr);
+                    const realBgColor = getEmailCellColor(avg.realizedCorr, corrScales.realizedCorr);
+                    const diffBgColor = getEmailCellColor(avg.difference, corrScales.corrDiff);
+                    
+                    html += `
+                    <td style="padding: 8px; text-align: center; font-weight: 600;">
+                        <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                            <span style="padding: 3px 6px; border-radius: 3px; background-color: ${implBgColor}; color: ${emailTextColor}; font-size: 10px;">
+                                ${formatCorrInteger(avg.impliedCorr)}
+                            </span>
+                            <span style="padding: 3px 6px; border-radius: 3px; background-color: ${realBgColor}; color: ${emailTextColor}; font-size: 10px;">
+                                ${formatCorrInteger(avg.realizedCorr)}
+                            </span>
+                            <span style="padding: 3px 6px; border-radius: 3px; background-color: ${diffBgColor}; color: ${emailTextColor}; font-size: 10px;">
+                                ${avg.difference >= 0 ? '+' : ''}${formatCorrInteger(avg.difference)}
+                            </span>
+                        </div>
+                    </td>`;
+                } else {
+                    html += `
+                    <td style="padding: 8px; text-align: center; color: #9ca3af;">—</td>`;
+                }
+            });
+            
+            html += `
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>`;
+            
+            return html;
         }
 
         function formatPnLRounded(pnl) {
@@ -4879,6 +5602,8 @@ ${Object.keys(window.correlationAnalysisResults || {}).length > 0 ? generateBott
 
 ${generateExpandableFullResults(window.batchAnalysisResults, window.correlationAnalysisResults, scales, window.currencies || [])}
 
+${/* Correlation matrix section removed from email - only available on webpage */ ''}
+
 <div style="margin-top: 48px; padding-top: 24px; border-top: 2px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px;">
     Generated: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST
 </div>
@@ -5183,6 +5908,7 @@ Full report in email.
             const overviewHTML = generateOverviewTab(pairResults, correlationResults);
             const pnlHTML = generatePnLTab(pairResults);
             const corrHTML = generateCorrelationTab(correlationResults);
+            const corr2HTML = generateCorrelationMatrixTab(window.correlationMatrix);
             const chartsHTML = generateChartsTab();
 
             // Build tabbed interface
@@ -5196,7 +5922,10 @@ Full report in email.
                             💰 P&L Analysis
                         </button>
                         <button class="batch-tab" data-tab="correlation" onclick="switchBatchTab('correlation')">
-                            🔗 Correlation
+                            🔗 Correlation 1
+                        </button>
+                        <button class="batch-tab" data-tab="correlation2" onclick="switchBatchTab('correlation2')">
+                            🔗 Correlation 2
                         </button>
                         <button class="batch-tab" data-tab="charts" onclick="switchBatchTab('charts')">
                             📈 Charts
@@ -5252,6 +5981,10 @@ Full report in email.
 
                 <div id="tab-correlation" class="batch-tab-panel">
                     ${corrHTML}
+                </div>
+
+                <div id="tab-correlation2" class="batch-tab-panel">
+                    ${corr2HTML}
                 </div>
 
                 <div id="tab-charts" class="batch-tab-panel">
@@ -6572,6 +7305,22 @@ Full report in email.
             }
             
             html += generateCorrelationResults(correlationResults);
+            
+            return html;
+        }
+
+        function generateCorrelationMatrixTab(correlationMatrix) {
+            let html = '<h2 style="margin-bottom: 24px;">Correlation Matrix via Intermediate Currencies</h2>';
+            
+            if (!correlationMatrix || Object.keys(correlationMatrix).length === 0) {
+                html += '<div class="info-box"><p>No correlation matrix data available. Enable correlation analysis in settings.</p></div>';
+                return html;
+            }
+            
+            // Get currencies from window.batchData if available
+            const currencies = window.batchData?.currencies || [];
+            html += generateCorrelationMatrixDisplay(correlationMatrix, currencies);
+            
             return html;
         }
 
