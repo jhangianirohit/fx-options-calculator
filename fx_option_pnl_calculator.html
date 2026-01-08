@@ -8007,13 +8007,13 @@ Full report in email.
                 const volDiffText = getTextColorForBackground(volDiffColor);
                 
                 html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px;">
+                            <td style="padding: 6px 8px; text-align: center; width: 100px; border-left: 2px solid var(--border-strong);">
                                 <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${realVolColor}; color: ${realVolText}; font-weight: 500; font-size: 10px;">${(result.realizedVol * 100).toFixed(2)}%</span>
                             </td>
                             <td style="padding: 6px 8px; text-align: center; width: 100px;">
                                 <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${implVolColor}; color: ${implVolText}; font-weight: 500; font-size: 10px;">${(result.impliedVol * 100).toFixed(2)}%</span>
                             </td>
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; border-left: 2px solid var(--border-strong);">
+                            <td style="padding: 6px 8px; text-align: center; width: 100px; ">
                                 <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${volDiffColor}; color: ${volDiffText}; font-weight: 600; font-size: 10px;">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</span>
                             </td>
                         </tr>`;
