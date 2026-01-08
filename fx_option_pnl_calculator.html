@@ -4337,41 +4337,62 @@ th {
             const max = scale.max;
             
             // Handle edge case
-            if (min === max) return 'rgb(70, 70, 70)';
-            
-            // Normalize value to 0-1 range where 0 = min, 1 = max
-            let ratio = (value - min) / (max - min);
-            ratio = Math.max(0, Math.min(1, ratio));
+            if (min === max) return 'rgb(128, 128, 128)';
             
             // Clean gradient: Dark Red (most negative) → Light Red → Neutral Gray → Light Green → Dark Green (most positive)
-            // Split at 0: negative values go from dark red to gray, positive values go from gray to dark green
             let r, g, b;
             
-            if (value < 0) {
-                // Negative range: Dark Red → Medium Red → Light Red → Gray
-                // Map from min (darkest red) to 0 (gray)
-                const negRatio = (value - min) / (0 - min);
-                const negRatioClamped = Math.max(0, Math.min(1, negRatio));
+            // Handle three cases: all negative, all positive, or mixed
+            if (max <= 0) {
+                // All values are negative or zero
+                // Map from min (darkest red) to max (less negative) to gray
+                const ratio = (value - min) / (max - min);
+                const ratioClamped = Math.max(0, Math.min(1, ratio));
                 
-                // Interpolate from dark red (139, 0, 0) to medium gray (128, 128, 128)
-                r = Math.round(139 + (128 - 139) * negRatioClamped);
-                g = Math.round(0 + (128 - 0) * negRatioClamped);
-                b = Math.round(0 + (128 - 0) * negRatioClamped);
-            } else if (value > 0) {
-                // Positive range: Gray → Light Green → Medium Green → Dark Green
-                // Map from 0 (gray) to max (darkest green)
-                const posRatio = value / max;
-                const posRatioClamped = Math.max(0, Math.min(1, posRatio));
+                // Interpolate from dark red (139, 0, 0) to lighter red/gray (180, 100, 100)
+                r = Math.round(139 + (180 - 139) * ratioClamped);
+                g = Math.round(0 + (100 - 0) * ratioClamped);
+                b = Math.round(0 + (100 - 0) * ratioClamped);
+            } else if (min >= 0) {
+                // All values are positive or zero
+                // Map from min (grey/light green) to max (darkest green)
+                const ratio = (value - min) / (max - min);
+                const ratioClamped = Math.max(0, Math.min(1, ratio));
                 
-                // Interpolate from medium gray (128, 128, 128) to dark green (0, 100, 0)
-                r = Math.round(128 + (0 - 128) * posRatioClamped);
-                g = Math.round(128 + (100 - 128) * posRatioClamped);
-                b = Math.round(128 + (0 - 128) * posRatioClamped);
+                // Interpolate from light grey-green (150, 170, 150) to dark green (0, 100, 0)
+                // This ensures even small positive values have visible green color
+                r = Math.round(150 + (0 - 150) * ratioClamped);
+                g = Math.round(170 + (100 - 170) * ratioClamped);
+                b = Math.round(150 + (0 - 150) * ratioClamped);
             } else {
-                // Exactly zero: neutral gray
-                r = 128;
-                g = 128;
-                b = 128;
+                // Mixed: min < 0 < max
+                // Split at 0: negative values go from dark red to gray, positive values go from gray to dark green
+                if (value < 0) {
+                    // Negative range: Dark Red → Gray
+                    // Map from min (darkest red) to 0 (gray)
+                    const negRatio = (value - min) / (0 - min);
+                    const negRatioClamped = Math.max(0, Math.min(1, negRatio));
+                    
+                    // Interpolate from dark red (139, 0, 0) to medium gray (128, 128, 128)
+                    r = Math.round(139 + (128 - 139) * negRatioClamped);
+                    g = Math.round(0 + (128 - 0) * negRatioClamped);
+                    b = Math.round(0 + (128 - 0) * negRatioClamped);
+                } else if (value > 0) {
+                    // Positive range: Gray → Dark Green
+                    // Map from 0 (gray) to max (darkest green)
+                    const posRatio = value / max;
+                    const posRatioClamped = Math.max(0, Math.min(1, posRatio));
+                    
+                    // Interpolate from medium gray (128, 128, 128) to dark green (0, 100, 0)
+                    r = Math.round(128 + (0 - 128) * posRatioClamped);
+                    g = Math.round(128 + (100 - 128) * posRatioClamped);
+                    b = Math.round(128 + (0 - 128) * posRatioClamped);
+                } else {
+                    // Exactly zero: neutral gray
+                    r = 128;
+                    g = 128;
+                    b = 128;
+                }
             }
             
             return `rgb(${r}, ${g}, ${b})`;
@@ -7223,7 +7244,15 @@ Full report in email.
             });
             
             // Store global scale in window for getPnLColor to use
-            window.globalPnLScale = { min: globalPnLMin, max: globalPnLMax };
+            // Ensure valid scale (handle edge case where all values are the same)
+            if (globalPnLMin === Infinity || globalPnLMax === -Infinity || globalPnLMin === globalPnLMax) {
+                // Fallback: use a range around zero
+                window.globalPnLScale = { min: Math.min(0, globalPnLMin - 100), max: Math.max(0, globalPnLMax + 100) };
+            } else {
+                window.globalPnLScale = { min: globalPnLMin, max: globalPnLMax };
+            }
+            
+            console.log('Global P&L Scale:', window.globalPnLScale);
             
             // Block controls
             html += `
@@ -7942,9 +7971,9 @@ Full report in email.
             });
             
             html += `
-                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Real Vol</th>
+                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated); border-left: 2px solid var(--border-strong);">Real Vol</th>
                             <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Impl Vol</th>
-                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated); border-left: 2px solid var(--border-strong);">Vol Diff</th>
+                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Vol Diff</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -8396,20 +8425,33 @@ Full report in email.
         function getPnLColor(pnl) {
             // Use global scale for consistent color gradation across all P&L values
             // Most positive = darkest green, most negative = darkest red
-            if (window.globalPnLScale && window.globalPnLScale.min !== Infinity && window.globalPnLScale.max !== -Infinity) {
+            if (window.globalPnLScale && 
+                window.globalPnLScale.min !== undefined && 
+                window.globalPnLScale.max !== undefined &&
+                window.globalPnLScale.min !== Infinity && 
+                window.globalPnLScale.max !== -Infinity &&
+                !isNaN(window.globalPnLScale.min) &&
+                !isNaN(window.globalPnLScale.max)) {
+                
                 const bgColor = getCellColor(pnl, window.globalPnLScale);
-                const textColor = getTextColorForBackground(bgColor);
-                return { bg: bgColor, text: textColor };
+                
+                // Double-check we got a valid color (not transparent)
+                if (bgColor && bgColor !== 'transparent') {
+                    const textColor = getTextColorForBackground(bgColor);
+                    return { bg: bgColor, text: textColor };
+                }
             }
             
-            // Fallback to old method if global scale not available
+            // Fallback: use a simple scale based on the value itself
+            // This should not normally happen, but prevents grey cells
             const pnlK = pnl / 1000;
-            if (pnlK >= 200) return { bg: '#006400', text: 'white' };
-            if (pnlK >= 100) return { bg: '#90EE90', text: 'black' };
-            if (pnlK >= 0) return { bg: '#FFFFE0', text: 'black' };
-            if (pnlK >= -100) return { bg: '#FFB6C1', text: 'black' };
-            if (pnlK >= -200) return { bg: '#FF6B6B', text: 'white' };
-            return { bg: '#8B0000', text: 'white' };
+            if (pnlK >= 200) return { bg: 'rgb(0, 100, 0)', text: 'white' };
+            if (pnlK >= 100) return { bg: 'rgb(0, 150, 0)', text: 'white' };
+            if (pnlK >= 50) return { bg: 'rgb(50, 150, 50)', text: 'white' };
+            if (pnlK >= 0) return { bg: 'rgb(128, 128, 128)', text: 'white' };
+            if (pnlK >= -50) return { bg: 'rgb(200, 50, 50)', text: 'white' };
+            if (pnlK >= -100) return { bg: 'rgb(150, 0, 0)', text: 'white' };
+            return { bg: 'rgb(139, 0, 0)', text: 'white' };
         }
 
         // ============ CUSTOM STRIKES MANAGEMENT ============
