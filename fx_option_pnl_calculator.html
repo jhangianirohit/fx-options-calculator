@@ -7955,8 +7955,8 @@ Full report in email.
                 html += `
                         <tr>
                             <td style="position: sticky; left: 0; background: var(--bg-main); z-index: 9; padding: 6px 10px; font-weight: 600; border-right: 2px solid var(--border); font-size: 11px;">${pair}</td>
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; width: 100px;">
-                                <span class="chart-cell" style="display: inline-block; min-width: 70px; display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: 600; font-size: 10px; cursor: pointer; font-family: 'SF Mono', Monaco, monospace; text-align: center;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</span>
+                            <td style="padding: 6px 8px; text-align: center; width: 100px;">
+                                <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: 600; font-size: 10px; cursor: pointer; font-family: 'SF Mono', Monaco, monospace; text-align: center;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</span>
                             </td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
@@ -7964,7 +7964,7 @@ Full report in email.
                     const color = getPnLColor(pnl);
                     const strikeType = strikeTypeMap[strikeName];
                     html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; width: 100px;">
+                            <td style="padding: 6px 8px; text-align: center; width: 100px;">
                                 <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${color.bg}; color: ${color.text}; font-weight: 500; font-size: 10px; cursor: pointer;" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</span>
                             </td>`;
                 });
@@ -7978,13 +7978,13 @@ Full report in email.
                 const volDiffText = getTextColorForBackground(volDiffColor);
                 
                 html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; width: 100px;">
+                            <td style="padding: 6px 8px; text-align: center; width: 100px;">
                                 <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${realVolColor}; color: ${realVolText}; font-weight: 500; font-size: 10px;">${(result.realizedVol * 100).toFixed(2)}%</span>
                             </td>
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; width: 100px;">
+                            <td style="padding: 6px 8px; text-align: center; width: 100px;">
                                 <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${implVolColor}; color: ${implVolText}; font-weight: 500; font-size: 10px;">${(result.impliedVol * 100).toFixed(2)}%</span>
                             </td>
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; width: 100px; border-left: 2px solid var(--border-strong);">
+                            <td style="padding: 6px 8px; text-align: center; width: 100px; border-left: 2px solid var(--border-strong);">
                                 <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${volDiffColor}; color: ${volDiffText}; font-weight: 600; font-size: 10px;">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</span>
                             </td>
                         </tr>`;
