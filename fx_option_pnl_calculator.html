@@ -7877,62 +7877,103 @@ Full report in email.
                 </div>
             `;
 
-            // Table 2: Pair Decompositions
+            // Table 2: Pair Decompositions - Grouped by Currency
             html += `
                 <div class="card" style="margin-bottom: 24px;">
-                    <h3 class="currency-header">🔀 Pair Decomposition</h3>
+                    <h3 class="currency-header">🔀 Pair Decomposition by Currency</h3>
                     <p style="margin-bottom: 16px; color: var(--text-secondary);">
                         Percentage of pair variance attributable to each constituent currency's basket exposure.
+                        Pairs are grouped by currency, with the group currency always shown on the left.
                     </p>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Pair</th>
-                                <th>Pair Vol</th>
-                                <th>CCY1</th>
-                                <th>CCY1 %</th>
-                                <th>CCY2</th>
-                                <th>CCY2 %</th>
-                            </tr>
-                        </thead>
-                        <tbody>
             `;
 
-            // Sort pairs by total variance
-            const sortedPairs = Object.entries(results.pairDecompositions)
-                .sort((a, b) => b[1].pairVol - a[1].pairVol);
+            // Group pairs by each currency
+            currencies.forEach(groupCcy => {
+                // Find all pairs involving this currency
+                const pairsForCurrency = [];
 
-            sortedPairs.forEach(([pair, decomp]) => {
-                const bar1Width = decomp.pct1.toFixed(0);
-                const bar2Width = decomp.pct2.toFixed(0);
+                Object.entries(results.pairDecompositions).forEach(([pair, decomp]) => {
+                    if (decomp.ccy1 === groupCcy || decomp.ccy2 === groupCcy) {
+                        // Determine if we need to swap the presentation
+                        const needsSwap = decomp.ccy2 === groupCcy;
+
+                        pairsForCurrency.push({
+                            displayPair: needsSwap ? (groupCcy + decomp.ccy1) : pair,
+                            pairVol: decomp.pairVol,
+                            leftCcy: groupCcy,
+                            rightCcy: needsSwap ? decomp.ccy1 : decomp.ccy2,
+                            leftPct: needsSwap ? decomp.pct2 : decomp.pct1,
+                            rightPct: needsSwap ? decomp.pct1 : decomp.pct2,
+                            leftBasketVol: needsSwap ? decomp.basketVol2 : decomp.basketVol1,
+                            rightBasketVol: needsSwap ? decomp.basketVol1 : decomp.basketVol2
+                        });
+                    }
+                });
+
+                // Sort by pair vol descending
+                pairsForCurrency.sort((a, b) => b.pairVol - a.pairVol);
+
+                // Calculate group average basket contribution
+                const avgContribution = pairsForCurrency.length > 0
+                    ? pairsForCurrency.reduce((sum, p) => sum + p.leftPct, 0) / pairsForCurrency.length
+                    : 0;
+
+                const currencyName = getCurrencyName(groupCcy);
 
                 html += `
-                    <tr>
-                        <td><strong>${pair}</strong></td>
-                        <td>${decomp.pairVol.toFixed(2)}%</td>
-                        <td>${decomp.ccy1}</td>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="background: var(--cyan); width: ${bar1Width}px; height: 16px; border-radius: 2px;"></div>
-                                <span>${decomp.pct1.toFixed(1)}%</span>
-                            </div>
-                        </td>
-                        <td>${decomp.ccy2}</td>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="background: var(--yellow); width: ${bar2Width}px; height: 16px; border-radius: 2px;"></div>
-                                <span>${decomp.pct2.toFixed(1)}%</span>
-                            </div>
-                        </td>
-                    </tr>
+                    <div class="currency-group-section" style="margin-bottom: 24px;">
+                        <h4 class="currency-header" style="border-left: 3px solid var(--cyan);">
+                            💱 ${currencyName} (${pairsForCurrency.length} pairs)
+                            <span style="font-weight: normal; font-size: 13px; color: var(--text-secondary); margin-left: 12px;">
+                                Avg ${groupCcy} contribution: ${avgContribution.toFixed(1)}%
+                            </span>
+                        </h4>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Pair</th>
+                                    <th>Pair Vol</th>
+                                    <th>${groupCcy} %</th>
+                                    <th>Counter CCY</th>
+                                    <th>Counter %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                pairsForCurrency.forEach(p => {
+                    const bar1Width = Math.min(p.leftPct, 100).toFixed(0);
+                    const bar2Width = Math.min(p.rightPct, 100).toFixed(0);
+
+                    html += `
+                        <tr>
+                            <td><strong>${p.displayPair}</strong></td>
+                            <td>${p.pairVol.toFixed(2)}%</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="background: var(--cyan); width: ${bar1Width}px; height: 16px; border-radius: 2px;"></div>
+                                    <span>${p.leftPct.toFixed(1)}%</span>
+                                </div>
+                            </td>
+                            <td>${p.rightCcy}</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="background: var(--yellow); width: ${bar2Width}px; height: 16px; border-radius: 2px;"></div>
+                                    <span>${p.rightPct.toFixed(1)}%</span>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
                 `;
             });
 
-            html += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
+            html += `</div>`;
 
             // Table 3: NxN Correlation Matrix
             html += `
