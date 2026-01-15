@@ -4271,6 +4271,8 @@ th {
                 volDiff: { min: Infinity, max: -Infinity },
                 allStrikesPnL: { min: Infinity, max: -Infinity },
                 avgPnL: { min: Infinity, max: -Infinity },
+                // Symmetric P&L scale around 0 (Excel-style): max absolute P&L across all strike + avg cells
+                pnlMaxAbs: 0,
                 impliedCorr: { min: Infinity, max: -Infinity },
                 realizedCorr: { min: Infinity, max: -Infinity },
                 corrDiff: { min: Infinity, max: -Infinity }
@@ -4302,11 +4304,13 @@ th {
                 allPnLs.forEach(pnl => {
                     scales.allStrikesPnL.min = Math.min(scales.allStrikesPnL.min, pnl);
                     scales.allStrikesPnL.max = Math.max(scales.allStrikesPnL.max, pnl);
+                    scales.pnlMaxAbs = Math.max(scales.pnlMaxAbs, Math.abs(pnl));
                 });
 
                 // Average P&L has its own scale
                 scales.avgPnL.min = Math.min(scales.avgPnL.min, result.avgPnL);
                 scales.avgPnL.max = Math.max(scales.avgPnL.max, result.avgPnL);
+                scales.pnlMaxAbs = Math.max(scales.pnlMaxAbs, Math.abs(result.avgPnL));
             });
 
             // Process correlation results
@@ -4326,6 +4330,39 @@ th {
             });
 
             return scales;
+        }
+
+        // Email-specific P&L color function (light-mode, email-safe)
+        // Uses the same symmetric max-abs logic as the webpage: +X deepest green, -X deepest red.
+        function getEmailPnLColor(pnlValue, pnlMaxAbs) {
+            const maxAbs = (pnlMaxAbs && !isNaN(pnlMaxAbs) && pnlMaxAbs > 0) ? pnlMaxAbs : 1;
+            const abs = Math.abs(pnlValue);
+            const t = Math.max(0, Math.min(1, abs / maxAbs));
+            const gamma = 0.6;
+            const tt = Math.pow(t, gamma);
+
+            // Endpoints tuned for LIGHT email background with dark text
+            // - Pale green: (232, 255, 232), Deep green: (16, 124, 16)
+            // - Pale red:   (255, 232, 232), Deep red:   (180, 24, 24)
+            let r, g, b;
+            if (pnlValue > 0) {
+                const r0 = 232, g0 = 255, b0 = 232;
+                const r1 = 16,  g1 = 124, b1 = 16;
+                r = Math.round(r0 + (r1 - r0) * tt);
+                g = Math.round(g0 + (g1 - g0) * tt);
+                b = Math.round(b0 + (b1 - b0) * tt);
+            } else if (pnlValue < 0) {
+                const r0 = 255, g0 = 232, b0 = 232;
+                const r1 = 180, g1 = 24,  b1 = 24;
+                r = Math.round(r0 + (r1 - r0) * tt);
+                g = Math.round(g0 + (g1 - g0) * tt);
+                b = Math.round(b0 + (b1 - b0) * tt);
+            } else {
+                // zero: subtle neutral cell (still readable)
+                r = 245; g = 245; b = 245;
+            }
+
+            return `rgb(${r}, ${g}, ${b})`;
         }
 
         function getCellColor(value, scale) {
@@ -4812,7 +4849,7 @@ th {
                 const implVolBgColor = getEmailCellColor(item.impliedVol, scales.impliedVol);
                 const realVolBgColor = getEmailCellColor(item.realizedVol, scales.realizedVol);
                 const volDiffBgColor = getEmailCellColor(item.volDifference, scales.volDiff);
-                const avgPnLBgColor = getEmailCellColor(item.avgPnL, scales.avgPnL);
+                const avgPnLBgColor = getEmailPnLColor(item.avgPnL, scales.pnlMaxAbs);
                 
                 // Email always uses dark text on light backgrounds
                 const emailTextColor = '#1f2937';
@@ -4883,7 +4920,7 @@ th {
                 const implVolBgColor = getEmailCellColor(item.impliedVol, scales.impliedVol);
                 const realVolBgColor = getEmailCellColor(item.realizedVol, scales.realizedVol);
                 const volDiffBgColor = getEmailCellColor(item.volDifference, scales.volDiff);
-                const avgPnLBgColor = getEmailCellColor(item.avgPnL, scales.avgPnL);
+                const avgPnLBgColor = getEmailPnLColor(item.avgPnL, scales.pnlMaxAbs);
                 
                 // Email always uses dark text on light backgrounds
                 const emailTextColor = '#1f2937';
@@ -5116,12 +5153,12 @@ th {
                 const implVolBgColor = getEmailCellColor(data.impliedVol, scales.impliedVol);
                 const realVolBgColor = getEmailCellColor(data.realizedVol, scales.realizedVol);
                 const volDiffBgColor = getEmailCellColor(data.volDiff, scales.volDiff);
-                const put10BgColor = getEmailCellColor(data.strikes['10Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
-                const put25BgColor = getEmailCellColor(data.strikes['25Δ Put']?.finalPnL || 0, scales.allStrikesPnL);
-                const atmBgColor = getEmailCellColor(data.strikes['ATM Call']?.finalPnL || 0, scales.allStrikesPnL);
-                const call25BgColor = getEmailCellColor(data.strikes['25Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
-                const call10BgColor = getEmailCellColor(data.strikes['10Δ Call']?.finalPnL || 0, scales.allStrikesPnL);
-                const avgPnLBgColor = getEmailCellColor(data.avgPnL, scales.avgPnL);
+                const put10BgColor = getEmailPnLColor(data.strikes['10Δ Put']?.finalPnL || 0, scales.pnlMaxAbs);
+                const put25BgColor = getEmailPnLColor(data.strikes['25Δ Put']?.finalPnL || 0, scales.pnlMaxAbs);
+                const atmBgColor = getEmailPnLColor(data.strikes['ATM Call']?.finalPnL || 0, scales.pnlMaxAbs);
+                const call25BgColor = getEmailPnLColor(data.strikes['25Δ Call']?.finalPnL || 0, scales.pnlMaxAbs);
+                const call10BgColor = getEmailPnLColor(data.strikes['10Δ Call']?.finalPnL || 0, scales.pnlMaxAbs);
+                const avgPnLBgColor = getEmailPnLColor(data.avgPnL, scales.pnlMaxAbs);
                 
                 // Email always uses dark text on light backgrounds
                 const emailTextColor = '#1f2937';
@@ -5186,8 +5223,8 @@ th {
                 const avgImplVolBgColor = getEmailCellColor(avgImplVol, scales.impliedVol);
                 const avgRealVolBgColor = getEmailCellColor(avgRealVol, scales.realizedVol);
                 const avgVolDiffBgColor = getEmailCellColor(avgVolDiff, scales.volDiff);
-                const avgATMBgColor = getEmailCellColor(avgATM, scales.allStrikesPnL);
-                const avgAvgPnLBgColor = getEmailCellColor(avgAvgPnL, scales.avgPnL);
+                const avgATMBgColor = getEmailPnLColor(avgATM, scales.pnlMaxAbs);
+                const avgAvgPnLBgColor = getEmailPnLColor(avgAvgPnL, scales.pnlMaxAbs);
 
                 // Email always uses dark text on light backgrounds
                 const emailTextColor = '#1f2937';
@@ -5650,10 +5687,10 @@ ${/* Correlation matrix section removed from email - only available on webpage *
                         
                         await navigator.clipboard.write([clipboardItem]);
                         
-                        if (statusEl) {
-                            statusEl.innerHTML = '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
-                            statusEl.style.color = 'var(--green)';
-                            setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
+                if (statusEl) {
+                    statusEl.innerHTML = '✓ Email report copied to clipboard! Paste into Outlook/Gmail.';
+                    statusEl.style.color = 'var(--green)';
+                    setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
                         }
                         return;
                     } catch (clipboardError) {
@@ -7102,6 +7139,9 @@ Full report in email.
         function generateOverviewTab(pairResults, correlationResults) {
             let html = '<h2 style="margin-bottom: 24px;">Analysis Summary</h2>';
             
+            // Ensure global symmetric P&L scale is available for consistent coloring in Overview
+            setGlobalPnLMaxAbsFromPairResults(pairResults);
+            
             // Analysis info box
             const analysisData = window.currentAnalysisData || batchData;
             const pairCount = pairResults.length;
@@ -7224,25 +7264,8 @@ Full report in email.
         function generatePnLTab(pairResults) {
             let html = '<h2 style="margin-bottom: 24px;">P&L Analysis by Currency</h2>';
             
-            // Calculate a symmetric P&L scale around 0 for coloring (Excel-style)
-            // Find max absolute P&L across ALL P&L values (avg and all strikes).
-            // +maxAbs => deepest green, -maxAbs => deepest red, values near 0 => palest tint (no greys for non-zero).
-            let globalPnLMaxAbs = 0;
-            
-            pairResults.forEach(([pair, result]) => {
-                // Check average P&L
-                const avgPnL = result.avgPnL * 1000; // Convert to base units
-                globalPnLMaxAbs = Math.max(globalPnLMaxAbs, Math.abs(avgPnL));
-                
-                // Check all strike P&Ls
-                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
-                    const pnl = result.strikes[strikeName].finalPnL;
-                    globalPnLMaxAbs = Math.max(globalPnLMaxAbs, Math.abs(pnl));
-                });
-            });
-            
-            // Store global P&L max abs in window for getPnLColor to use
-            window.globalPnLMaxAbs = globalPnLMaxAbs > 0 ? globalPnLMaxAbs : 1;
+            // Ensure global symmetric P&L scale is available for consistent coloring in all P&L tables
+            setGlobalPnLMaxAbsFromPairResults(pairResults);
             
             // Block controls
             html += `
@@ -7749,7 +7772,7 @@ Full report in email.
         }
 
         function generateRankingTable(pairs, startRank) {
-            let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
+            let html = '<div class="card" style="overflow-x: auto;"><table class="data-table" style="min-width: 900px; font-size: 11px;"><thead><tr>';
             html += '<th class="sortable-header" onclick="sortTable(this, 0, \'number\')">Rank</th>';
             html += '<th class="sortable-header" onclick="sortTable(this, 1, \'string\')">Pair</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 2, \'number\')">Avg P&L</th>';
@@ -7758,7 +7781,8 @@ Full report in email.
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 5, \'number\')">ATM Call</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 6, \'number\')">25Δ Call</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 7, \'number\')">10Δ Call</th>';
-            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 8, \'number\')">Real Vol</th>';
+            // Separator between P&L and Vol columns
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 8, \'number\')" style="border-left: 2px solid var(--border-strong);">Real Vol</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Impl Vol</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 10, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
@@ -7779,24 +7803,52 @@ Full report in email.
                 html += '<tr>';
                 html += `<td>${rank}</td>`;
                 html += `<td style="font-weight: bold;">${pair}</td>`;
-                html += `<td class="data-table-numbers chart-cell" style="background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: bold;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</td>`;
+                html += `<td style="text-align: center; width: 110px;">
+                    <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: 700; font-size: 10px; cursor: pointer;"
+                          data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</span>
+                </td>`;
 
                 // Individual strike P&Ls
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
                     const color = getPnLColor(pnl);
                     const strikeType = strikeTypeMap[strikeName];
-                    html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
+                    html += `<td style="text-align: center; width: 110px;">
+                        <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${color.bg}; color: ${color.text}; font-weight: 500; font-size: 10px; cursor: pointer;"
+                              data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</span>
+                    </td>`;
                 });
 
-                html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
+                // Vol columns (plain numbers, sortable)
+                html += `<td class="data-table-numbers" style="border-left: 2px solid var(--border-strong);">${(result.realizedVol * 100).toFixed(2)}%</td>`;
                 html += `<td class="data-table-numbers">${(result.impliedVol * 100).toFixed(2)}%</td>`;
                 html += `<td class="data-table-numbers">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
                 html += '</tr>';
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
             return html;
+        }
+
+        function setGlobalPnLMaxAbsFromPairResults(pairResults) {
+            // pairResults is expected to be an array of [pair, result] tuples
+            if (!Array.isArray(pairResults) || pairResults.length === 0) {
+                window.globalPnLMaxAbs = 1;
+                return;
+            }
+            let maxAbs = 0;
+            pairResults.forEach(([_, result]) => {
+                if (!result) return;
+                const avgPnL = (result.avgPnL || 0) * 1000;
+                maxAbs = Math.max(maxAbs, Math.abs(avgPnL));
+                const strikes = result.strikes || {};
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    const pnl = strikes[strikeName]?.finalPnL;
+                    if (pnl === undefined || pnl === null) return;
+                    maxAbs = Math.max(maxAbs, Math.abs(pnl));
+                });
+            });
+            window.globalPnLMaxAbs = maxAbs > 0 ? maxAbs : 1;
         }
 
         function displayCurrencyGroups(pairResults) {
@@ -7952,25 +8004,26 @@ Full report in email.
                 <table class="data-table" style="min-width: 800px; font-size: 11px;">
                     <thead>
                         <tr>
-                            <th style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 10; padding: 8px 10px; text-align: left; border-right: 2px solid var(--border);">Pair</th>
-                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Avg P&L</th>`;
+                            <th class="sortable-header" onclick="sortTable(this, 0, 'string')" style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 10; padding: 8px 10px; text-align: left; border-right: 2px solid var(--border);">Pair</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 1, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Avg P&L</th>`;
             
             // Strike headers
             ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
-                html += `<th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">${strikeName}</th>`;
+                const idxMap = { '10Δ Put': 2, '25Δ Put': 3, 'ATM Call': 4, '25Δ Call': 5, '10Δ Call': 6 };
+                html += `<th class="sortable-header numeric-header" onclick="sortTable(this, ${idxMap[strikeName]}, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">${strikeName}</th>`;
             });
             
             html += `
-                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated); border-left: 2px solid var(--border-strong);">Real Vol</th>
-                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Impl Vol</th>
-                            <th style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Vol Diff</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 7, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated); border-left: 2px solid var(--border-strong);">Real Vol</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 8, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Impl Vol</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 9, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Vol Diff</th>
                         </tr>
                     </thead>
                     <tbody>`;
 
             pairs.forEach(([pair, result]) => {
                 const avgColor = getPnLColor(result.avgPnL * 1000);
-                
+
                 html += `
                         <tr>
                             <td style="position: sticky; left: 0; background: var(--bg-main); z-index: 9; padding: 6px 10px; font-weight: 600; border-right: 2px solid var(--border); font-size: 11px;">${pair}</td>
