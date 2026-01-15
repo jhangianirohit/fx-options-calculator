@@ -5957,6 +5957,7 @@ Full report in email.
             const corrHTML = generateCorrelationTab(correlationResults);
             const corr2HTML = generateCorrelationMatrixTab(window.correlationMatrix);
             const chartsHTML = generateChartsTab();
+            const basketHTML = generateBasketDecompositionTab();
 
             // Build tabbed interface
             let html = `
@@ -5976,6 +5977,9 @@ Full report in email.
                         </button>
                         <button class="batch-tab" data-tab="charts" onclick="switchBatchTab('charts')">
                             📈 Charts
+                        </button>
+                        <button class="batch-tab" data-tab="basket" onclick="switchBatchTab('basket')">
+                            🧺 Basket Decomposition
                         </button>
                     </div>
                 </div>
@@ -6036,6 +6040,10 @@ Full report in email.
 
                 <div id="tab-charts" class="batch-tab-panel">
                     ${chartsHTML}
+                </div>
+
+                <div id="tab-basket" class="batch-tab-panel">
+                    ${basketHTML}
                 </div>
             `;
 
@@ -7388,6 +7396,600 @@ Full report in email.
                     </p>
                 </div>
             `;
+        }
+
+        // ============================================
+        // BASKET DECOMPOSITION MODULE
+        // ============================================
+
+        // The 8 currencies in our universe
+        const BASKET_CURRENCIES = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY', 'USD'];
+
+        // The 7 basis pairs (all vs USD) - used as the basis for the covariance matrix
+        const BASIS_PAIRS = ['EURUSD', 'GBPUSD', 'AUDUSD', 'NZDUSD', 'USDCAD', 'USDCHF', 'USDJPY'];
+
+        // All 28 possible pairs from 8 currencies
+        const ALL_28_PAIRS = [
+            'EURUSD', 'EURGBP', 'EURAUD', 'EURNZD', 'EURCAD', 'EURCHF', 'EURJPY',
+            'GBPUSD', 'GBPAUD', 'GBPNZD', 'GBPCAD', 'GBPCHF', 'GBPJPY',
+            'AUDUSD', 'AUDNZD', 'AUDCAD', 'AUDCHF', 'AUDJPY',
+            'NZDUSD', 'NZDCAD', 'NZDCHF', 'NZDJPY',
+            'USDCAD', 'CADCHF', 'CADJPY',
+            'USDCHF', 'CHFJPY',
+            'USDJPY'
+        ];
+
+        // Store basket decomposition results globally
+        window.basketDecompositionResults = null;
+
+        function generateBasketDecompositionTab() {
+            return `
+                <h2 style="margin-bottom: 24px;">🧺 FX Currency Basket Decomposition</h2>
+
+                <div class="card" style="margin-bottom: 24px;">
+                    <h3 class="currency-header">About This Analysis</h3>
+                    <p style="margin-bottom: 12px;">
+                        This module decomposes FX pair volatilities into contributions from "universal basket" exposures
+                        for each of the 8 major currencies (EUR, GBP, AUD, NZD, CAD, CHF, JPY, USD).
+                    </p>
+                    <p style="margin-bottom: 12px;">
+                        <strong>Requirements:</strong> ATM implied volatilities for all 28 currency pair combinations.
+                    </p>
+                    <p style="color: var(--text-muted);">
+                        The analysis uses the 7 USD basis pairs to construct a covariance matrix, then derives
+                        basket volatilities and cross-currency correlations.
+                    </p>
+                </div>
+
+                <div class="card" style="margin-bottom: 24px;">
+                    <h3 class="currency-header">Input Status</h3>
+                    <div id="basketInputStatus">
+                        ${generateBasketInputStatus()}
+                    </div>
+                    <div style="margin-top: 16px;">
+                        <button class="btn btn-primary" onclick="computeBasketDecomposition()" id="computeBasketBtn">
+                            🔬 Compute Decomposition
+                        </button>
+                    </div>
+                </div>
+
+                <div id="basketResults">
+                    ${window.basketDecompositionResults ? generateBasketResultsHTML() : '<p style="color: var(--text-muted); text-align: center;">Click "Compute Decomposition" to run the analysis.</p>'}
+                </div>
+            `;
+        }
+
+        function generateBasketInputStatus() {
+            const impliedVols = batchData.impliedVols || {};
+            const availablePairs = [];
+            const missingPairs = [];
+
+            ALL_28_PAIRS.forEach(pair => {
+                // Check both pair and its inverse
+                const inversePair = pair.slice(3, 6) + pair.slice(0, 3);
+                if (impliedVols[pair] !== undefined || impliedVols[inversePair] !== undefined) {
+                    availablePairs.push(pair);
+                } else {
+                    missingPairs.push(pair);
+                }
+            });
+
+            const coverage = (availablePairs.length / 28 * 100).toFixed(0);
+            const canCompute = missingPairs.length === 0;
+
+            let html = `
+                <div style="display: flex; gap: 24px; margin-bottom: 16px;">
+                    <div>
+                        <span style="font-size: 32px; font-weight: bold; color: ${canCompute ? 'var(--green)' : 'var(--yellow)'};">
+                            ${availablePairs.length}/28
+                        </span>
+                        <span style="color: var(--text-secondary);"> pairs available</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 32px; font-weight: bold;">${coverage}%</span>
+                        <span style="color: var(--text-secondary);"> coverage</span>
+                    </div>
+                </div>
+            `;
+
+            if (missingPairs.length > 0) {
+                html += `
+                    <div style="background: rgba(234, 179, 8, 0.1); border: 1px solid var(--yellow); border-radius: 8px; padding: 12px; margin-top: 12px;">
+                        <strong style="color: var(--yellow);">⚠️ Missing Pairs (${missingPairs.length}):</strong>
+                        <div style="margin-top: 8px; font-family: var(--font-mono); font-size: 13px;">
+                            ${missingPairs.join(', ')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid var(--green); border-radius: 8px; padding: 12px; margin-top: 12px;">
+                        <strong style="color: var(--green);">✅ All 28 pairs available - ready to compute!</strong>
+                    </div>
+                `;
+            }
+
+            return html;
+        }
+
+        function getVolForPair(pair) {
+            const impliedVols = batchData.impliedVols || {};
+            const inversePair = pair.slice(3, 6) + pair.slice(0, 3);
+
+            if (impliedVols[pair] !== undefined) {
+                return impliedVols[pair];
+            } else if (impliedVols[inversePair] !== undefined) {
+                return impliedVols[inversePair];
+            }
+            return null;
+        }
+
+        function computeBasketDecomposition() {
+            const impliedVols = batchData.impliedVols || {};
+
+            // Check we have all 28 pairs
+            const missingPairs = ALL_28_PAIRS.filter(pair => getVolForPair(pair) === null);
+
+            if (missingPairs.length > 0) {
+                alert(`Cannot compute: Missing volatilities for ${missingPairs.length} pairs:\n${missingPairs.join(', ')}`);
+                return;
+            }
+
+            try {
+                // Step 1: Build the 7x7 covariance matrix for basis pairs
+                const covMatrix = buildCovarianceMatrix();
+
+                // Step 2: Calculate basket volatilities for each currency
+                const basketVols = calculateBasketVolatilities(covMatrix);
+
+                // Step 3: Calculate pair decomposition percentages
+                const pairDecompositions = calculatePairDecompositions(basketVols, covMatrix);
+
+                // Step 4: Calculate 8x8 basket correlation matrix
+                const basketCorrelations = calculateBasketCorrelationMatrix(covMatrix, basketVols);
+
+                // Store results
+                window.basketDecompositionResults = {
+                    covMatrix,
+                    basketVols,
+                    pairDecompositions,
+                    basketCorrelations,
+                    timestamp: new Date().toISOString()
+                };
+
+                // Update the results div
+                document.getElementById('basketResults').innerHTML = generateBasketResultsHTML();
+
+            } catch (error) {
+                console.error('Basket decomposition error:', error);
+                alert('Error computing basket decomposition: ' + error.message);
+            }
+        }
+
+        function buildCovarianceMatrix() {
+            // Build 7x7 covariance matrix for the 7 basis pairs
+            // Using the relationship: Cov(XY, ZW) can be derived from pair volatilities
+            // For cross pairs: σ²(AB) = σ²(A/USD) + σ²(B/USD) - 2*Cov(A/USD, B/USD)
+            // Rearranging: Cov(A/USD, B/USD) = (σ²(A/USD) + σ²(B/USD) - σ²(AB)) / 2
+
+            const n = 7;
+            const cov = Array(n).fill(null).map(() => Array(n).fill(0));
+
+            // Map currency to basis pair index
+            // EUR=0, GBP=1, AUD=2, NZD=3, CAD=4, CHF=5, JPY=6
+            const currencyToIndex = {
+                'EUR': 0, 'GBP': 1, 'AUD': 2, 'NZD': 3, 'CAD': 4, 'CHF': 5, 'JPY': 6
+            };
+
+            // Get variances (diagonal elements)
+            BASIS_PAIRS.forEach((pair, i) => {
+                const vol = getVolForPair(pair);
+                cov[i][i] = vol * vol; // Variance
+            });
+
+            // Get covariances (off-diagonal elements) from cross pair volatilities
+            // For currencies i and j (both non-USD), the cross pair gives us:
+            // σ²(cross) = σ²(i/USD) + σ²(j/USD) - 2*Cov(i,j)
+            // BUT we need to account for quote convention (some pairs are XXX/USD, others are USD/XXX)
+
+            const nonUsdCurrencies = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY'];
+
+            for (let i = 0; i < nonUsdCurrencies.length; i++) {
+                for (let j = i + 1; j < nonUsdCurrencies.length; j++) {
+                    const ccy1 = nonUsdCurrencies[i];
+                    const ccy2 = nonUsdCurrencies[j];
+
+                    // Find the cross pair vol
+                    const crossPair = findCrossPair(ccy1, ccy2);
+                    const crossVol = getVolForPair(crossPair);
+
+                    if (crossVol === null) {
+                        console.warn(`Missing cross pair: ${crossPair}`);
+                        continue;
+                    }
+
+                    // Get sign adjustments based on quote convention
+                    const sign1 = getUsdSign(ccy1);
+                    const sign2 = getUsdSign(ccy2);
+
+                    // σ²(cross) = σ²(ccy1/USD) + σ²(ccy2/USD) - 2*sign1*sign2*Cov(ccy1/USD, ccy2/USD)
+                    // Cov = sign1*sign2 * (σ²(ccy1/USD) + σ²(ccy2/USD) - σ²(cross)) / 2
+
+                    const var1 = cov[i][i];
+                    const var2 = cov[j][j];
+                    const crossVar = crossVol * crossVol;
+
+                    const covariance = sign1 * sign2 * (var1 + var2 - crossVar) / 2;
+
+                    cov[i][j] = covariance;
+                    cov[j][i] = covariance;
+                }
+            }
+
+            return cov;
+        }
+
+        function getUsdSign(currency) {
+            // Returns +1 if the standard pair is CCY/USD (CCY goes up when pair goes up)
+            // Returns -1 if the standard pair is USD/CCY (CCY goes down when pair goes up)
+            const positiveConvention = ['EUR', 'GBP', 'AUD', 'NZD'];
+            return positiveConvention.includes(currency) ? 1 : -1;
+        }
+
+        function findCrossPair(ccy1, ccy2) {
+            // Find the cross pair name for two non-USD currencies
+            // Order follows market convention
+            const marketOrder = ['EUR', 'GBP', 'AUD', 'NZD', 'USD', 'CAD', 'CHF', 'JPY'];
+            const idx1 = marketOrder.indexOf(ccy1);
+            const idx2 = marketOrder.indexOf(ccy2);
+
+            if (idx1 < idx2) {
+                return ccy1 + ccy2;
+            } else {
+                return ccy2 + ccy1;
+            }
+        }
+
+        function calculateBasketVolatilities(covMatrix) {
+            // For each currency, calculate its "basket volatility"
+            // This represents the volatility of a portfolio that is long 1 unit of that currency
+            // against an equal-weighted basket of all other currencies
+
+            const basketVols = {};
+            const n = 7; // Number of non-USD currencies
+
+            // For non-USD currencies: basket vol is derived from the covariance matrix
+            const nonUsdCurrencies = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY'];
+
+            nonUsdCurrencies.forEach((ccy, i) => {
+                // Basket variance for currency i:
+                // Var(basket_i) = (1/7) * Σ_j Var(i/j) where j ≠ i
+                // For the 7 non-USD currencies, we sum variance against all 7 others (including USD)
+
+                let sumVar = 0;
+                const sign_i = getUsdSign(ccy);
+
+                // Variance against USD (direct from diagonal)
+                sumVar += covMatrix[i][i];
+
+                // Variance against other non-USD currencies
+                nonUsdCurrencies.forEach((ccy2, j) => {
+                    if (i === j) return;
+
+                    const sign_j = getUsdSign(ccy2);
+
+                    // Var(i/j) = Var(i/USD) + Var(j/USD) - 2*sign_i*sign_j*Cov(i/USD, j/USD)
+                    // But since we stored covariance with signs already factored:
+                    // Let's recalculate properly
+                    const crossPair = findCrossPair(ccy, ccy2);
+                    const crossVol = getVolForPair(crossPair);
+                    if (crossVol !== null) {
+                        sumVar += crossVol * crossVol;
+                    }
+                });
+
+                // Average over 7 pairs (6 crosses + 1 USD pair)
+                const basketVar = sumVar / 7;
+                basketVols[ccy] = Math.sqrt(basketVar);
+            });
+
+            // For USD: basket variance is average of all 7 USD pairs
+            let usdSumVar = 0;
+            BASIS_PAIRS.forEach((pair, i) => {
+                usdSumVar += covMatrix[i][i];
+            });
+            basketVols['USD'] = Math.sqrt(usdSumVar / 7);
+
+            return basketVols;
+        }
+
+        function calculatePairDecompositions(basketVols, covMatrix) {
+            // For each pair, calculate what percentage of variance comes from each currency
+            const decompositions = {};
+
+            ALL_28_PAIRS.forEach(pair => {
+                const ccy1 = pair.slice(0, 3);
+                const ccy2 = pair.slice(3, 6);
+                const pairVol = getVolForPair(pair);
+
+                if (pairVol === null) return;
+
+                const pairVar = pairVol * pairVol;
+                const basketVar1 = basketVols[ccy1] * basketVols[ccy1];
+                const basketVar2 = basketVols[ccy2] * basketVols[ccy2];
+
+                // Simple decomposition: proportion of basket variance
+                const totalBasketVar = basketVar1 + basketVar2;
+
+                if (totalBasketVar > 0) {
+                    decompositions[pair] = {
+                        ccy1: ccy1,
+                        ccy2: ccy2,
+                        pct1: (basketVar1 / totalBasketVar) * 100,
+                        pct2: (basketVar2 / totalBasketVar) * 100,
+                        pairVol: pairVol * 100, // Convert to percentage
+                        basketVol1: basketVols[ccy1] * 100,
+                        basketVol2: basketVols[ccy2] * 100
+                    };
+                }
+            });
+
+            return decompositions;
+        }
+
+        function calculateBasketCorrelationMatrix(covMatrix, basketVols) {
+            // Calculate 8x8 correlation matrix between basket exposures
+            const correlations = {};
+
+            // Initialize correlation matrix
+            BASKET_CURRENCIES.forEach(ccy1 => {
+                correlations[ccy1] = {};
+                BASKET_CURRENCIES.forEach(ccy2 => {
+                    if (ccy1 === ccy2) {
+                        correlations[ccy1][ccy2] = 1.0;
+                    } else {
+                        correlations[ccy1][ccy2] = 0;
+                    }
+                });
+            });
+
+            // For pairs of non-USD currencies, derive correlation from covariance matrix
+            const nonUsdCurrencies = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY'];
+            const currencyToIndex = {
+                'EUR': 0, 'GBP': 1, 'AUD': 2, 'NZD': 3, 'CAD': 4, 'CHF': 5, 'JPY': 6
+            };
+
+            // Correlation between non-USD currency baskets
+            for (let i = 0; i < nonUsdCurrencies.length; i++) {
+                for (let j = i + 1; j < nonUsdCurrencies.length; j++) {
+                    const ccy1 = nonUsdCurrencies[i];
+                    const ccy2 = nonUsdCurrencies[j];
+
+                    const vol1 = basketVols[ccy1];
+                    const vol2 = basketVols[ccy2];
+
+                    if (vol1 > 0 && vol2 > 0) {
+                        // Use the cross pair implied correlation
+                        const crossPair = findCrossPair(ccy1, ccy2);
+                        const crossVol = getVolForPair(crossPair);
+                        const basisVol1 = getVolForPair(getBasisPair(ccy1));
+                        const basisVol2 = getVolForPair(getBasisPair(ccy2));
+
+                        if (crossVol !== null && basisVol1 !== null && basisVol2 !== null) {
+                            // ρ = (σ1² + σ2² - σcross²) / (2 * σ1 * σ2)
+                            // Account for sign convention
+                            const sign1 = getUsdSign(ccy1);
+                            const sign2 = getUsdSign(ccy2);
+
+                            let rho = (basisVol1 * basisVol1 + basisVol2 * basisVol2 - crossVol * crossVol) /
+                                      (2 * basisVol1 * basisVol2);
+                            rho = rho * sign1 * sign2;
+
+                            // Clamp to valid correlation range
+                            rho = Math.max(-1, Math.min(1, rho));
+
+                            correlations[ccy1][ccy2] = rho;
+                            correlations[ccy2][ccy1] = rho;
+                        }
+                    }
+                }
+            }
+
+            // Correlation of non-USD currencies with USD basket
+            // USD basket has negative correlation with risk currencies on average
+            nonUsdCurrencies.forEach((ccy, i) => {
+                // Use the fact that USD is the other side of all basis pairs
+                // Average correlation of ccy basket with USD basket
+                const basisVol = getVolForPair(getBasisPair(ccy));
+                const sign = getUsdSign(ccy);
+
+                if (basisVol !== null && basketVols[ccy] > 0 && basketVols['USD'] > 0) {
+                    // Simplified: use -1 * sign * (basisVar / (basketVol_ccy * basketVol_USD))
+                    // This captures the inverse relationship
+                    let rho = -sign * (basisVol * basisVol) / (basketVols[ccy] * basketVols['USD'] * 2);
+                    rho = Math.max(-1, Math.min(1, rho));
+
+                    correlations[ccy]['USD'] = rho;
+                    correlations['USD'][ccy] = rho;
+                }
+            });
+
+            return correlations;
+        }
+
+        function getBasisPair(ccy) {
+            // Get the USD basis pair for a currency
+            if (ccy === 'USD') return null;
+
+            const positiveConvention = ['EUR', 'GBP', 'AUD', 'NZD'];
+            if (positiveConvention.includes(ccy)) {
+                return ccy + 'USD';
+            } else {
+                return 'USD' + ccy;
+            }
+        }
+
+        function generateBasketResultsHTML() {
+            const results = window.basketDecompositionResults;
+            if (!results) return '';
+
+            let html = '';
+
+            // Table 1: Basket Volatilities
+            html += `
+                <div class="card" style="margin-bottom: 24px;">
+                    <h3 class="currency-header">📊 Basket Volatilities</h3>
+                    <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                        Annualized volatility of each currency's "basket" exposure against all others.
+                    </p>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Currency</th>
+                                <th>Basket Vol (%)</th>
+                                <th>Relative Rank</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            // Sort currencies by basket vol
+            const sortedCurrencies = BASKET_CURRENCIES.slice().sort((a, b) =>
+                results.basketVols[b] - results.basketVols[a]
+            );
+
+            sortedCurrencies.forEach((ccy, rank) => {
+                const vol = results.basketVols[ccy] * 100;
+                const volColor = vol > 10 ? 'var(--red)' : vol > 7 ? 'var(--yellow)' : 'var(--green)';
+                html += `
+                    <tr>
+                        <td><strong>${ccy}</strong></td>
+                        <td style="color: ${volColor}; font-weight: bold;">${vol.toFixed(2)}%</td>
+                        <td>#${rank + 1}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            // Table 2: Pair Decompositions
+            html += `
+                <div class="card" style="margin-bottom: 24px;">
+                    <h3 class="currency-header">🔀 Pair Decomposition</h3>
+                    <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                        Percentage of pair variance attributable to each constituent currency's basket exposure.
+                    </p>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Pair</th>
+                                <th>Pair Vol</th>
+                                <th>CCY1</th>
+                                <th>CCY1 %</th>
+                                <th>CCY2</th>
+                                <th>CCY2 %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            // Sort pairs by total variance
+            const sortedPairs = Object.entries(results.pairDecompositions)
+                .sort((a, b) => b[1].pairVol - a[1].pairVol);
+
+            sortedPairs.forEach(([pair, decomp]) => {
+                const bar1Width = decomp.pct1.toFixed(0);
+                const bar2Width = decomp.pct2.toFixed(0);
+
+                html += `
+                    <tr>
+                        <td><strong>${pair}</strong></td>
+                        <td>${decomp.pairVol.toFixed(2)}%</td>
+                        <td>${decomp.ccy1}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="background: var(--cyan); width: ${bar1Width}px; height: 16px; border-radius: 2px;"></div>
+                                <span>${decomp.pct1.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                        <td>${decomp.ccy2}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="background: var(--yellow); width: ${bar2Width}px; height: 16px; border-radius: 2px;"></div>
+                                <span>${decomp.pct2.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            // Table 3: 8x8 Correlation Matrix
+            html += `
+                <div class="card" style="margin-bottom: 24px;">
+                    <h3 class="currency-header">🔗 8×8 Basket Correlation Matrix</h3>
+                    <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                        Implied correlations between currency basket exposures.
+                    </p>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table correlation-matrix">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    ${BASKET_CURRENCIES.map(c => `<th>${c}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            BASKET_CURRENCIES.forEach(ccy1 => {
+                html += `<tr><td><strong>${ccy1}</strong></td>`;
+                BASKET_CURRENCIES.forEach(ccy2 => {
+                    const corr = results.basketCorrelations[ccy1][ccy2];
+                    const color = getCorrelationColor(corr);
+                    html += `<td style="background-color: ${color}; text-align: center;">${corr.toFixed(2)}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            // Timestamp
+            html += `
+                <p style="text-align: center; color: var(--text-muted); font-size: 12px;">
+                    Computed at: ${new Date(results.timestamp).toLocaleString()}
+                </p>
+            `;
+
+            return html;
+        }
+
+        function getCorrelationColor(corr) {
+            // Blue for negative, red for positive, white for zero
+            if (Math.abs(corr) < 0.01) return 'transparent';
+
+            const intensity = Math.abs(corr);
+            const alpha = 0.1 + intensity * 0.6;
+
+            if (corr > 0) {
+                return `rgba(34, 197, 94, ${alpha})`; // Green for positive
+            } else {
+                return `rgba(239, 68, 68, ${alpha})`; // Red for negative
+            }
         }
 
         function generatePnLResults(pairResults) {
