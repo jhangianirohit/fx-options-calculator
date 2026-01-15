@@ -7138,10 +7138,10 @@ Full report in email.
 
         function generateOverviewTab(pairResults, correlationResults) {
             let html = '<h2 style="margin-bottom: 24px;">Analysis Summary</h2>';
-            
-            // Ensure global symmetric P&L scale is available for consistent coloring in Overview
-            setGlobalPnLMaxAbsFromPairResults(pairResults);
-            
+
+            // Calculate scales once for the entire tab - all tables share consistent coloring
+            const scales = calculateTabScales(pairResults);
+
             // Analysis info box
             const analysisData = window.currentAnalysisData || batchData;
             const pairCount = pairResults.length;
@@ -7162,17 +7162,17 @@ Full report in email.
             html += `
                 <div class="summary-section">
                     <h3>🏆 Top 5 P&L Performers</h3>
-                    ${generateRankingTable(top5Vol, 1)}
+                    ${generateRankingTable(top5Vol, 1, scales)}
                 </div>
             `;
-            
+
             // Bottom 5 Vol Performers
             const bottom5Vol = pairResults.slice(-5).reverse();
             const bottom5StartRank = Math.max(1, pairResults.length - bottom5Vol.length + 1);
             html += `
                 <div class="summary-section">
                     <h3>📉 Bottom 5 P&L Performers</h3>
-                    ${generateRankingTable(bottom5Vol, bottom5StartRank)}
+                    ${generateRankingTable(bottom5Vol, bottom5StartRank, scales)}
                 </div>
             `;
             
@@ -7263,10 +7263,10 @@ Full report in email.
 
         function generatePnLTab(pairResults) {
             let html = '<h2 style="margin-bottom: 24px;">P&L Analysis by Currency</h2>';
-            
-            // Ensure global symmetric P&L scale is available for consistent coloring in all P&L tables
-            setGlobalPnLMaxAbsFromPairResults(pairResults);
-            
+
+            // Calculate scales once for the entire tab - all tables share consistent coloring
+            const scales = calculateTabScales(pairResults);
+
             // Block controls
             html += `
                 <div class="block-controls">
@@ -7300,7 +7300,7 @@ Full report in email.
                     <span class="currency-name">💱 ${currencyName} (${pairsWithResults.length} pairs)</span>
                 </div>`;
                 html += `<div class="currency-content">`;
-                html += generateCurrencyGroupTable(pairsWithResults);
+                html += generateCurrencyGroupTable(pairsWithResults, scales);
                 html += `<div class="summary-block" style="margin-top: 12px;"><strong>Group Average:</strong> <span style="font-family: var(--font-mono);">${formatThousand(groupAvg)}</span></div>`;
                 html += `</div></div>`;
             });
@@ -7308,7 +7308,7 @@ Full report in email.
             // Expandable Details
             html += '<h2 style="margin-top: 32px; margin-bottom: 24px;">Pair Details (Click to Expand)</h2>';
             pairResults.forEach(([pair, result]) => {
-                const avgColor = getPnLColor(result.avgPnL * 1000);
+                const avgColor = getPnLColor(result.avgPnL * 1000, scales.avgPnLMaxAbs);
                 html += `<div class="expandable-pair">`;
                 html += `<div class="pair-header" onclick="togglePairDetails('${pair}')">`;
                 html += `<span style="font-weight: bold; font-size: 16px;">▶ ${pair}</span>`;
@@ -7330,7 +7330,7 @@ Full report in email.
                 html += '</tr><tr><td><strong>P&L (k)</strong></td>';
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
-                    const color = getPnLColor(pnl);
+                    const color = getPnLColor(pnl, scales.strikePnLMaxAbs);
                     html += `<td style="background-color: ${color.bg}; color: ${color.text}; font-weight: bold;">${formatThousand(pnl)}</td>`;
                 });
                 html += '</tr></tbody></table>';
@@ -7393,6 +7393,9 @@ Full report in email.
         function generatePnLResults(pairResults) {
             let html = '';
 
+            // Calculate scales once for consistent coloring across all tables in this view
+            const scales = calculateTabScales(pairResults);
+
             // Top 5 / Bottom 5 Rankings
             const top5 = pairResults.slice(0, 5);
             const bottom5 = pairResults.slice(-5).reverse();
@@ -7401,12 +7404,12 @@ Full report in email.
             html += `
             <div class="card">
                 <h3 class="currency-header" style="text-align: center;">🏆 TOP 5 PERFORMERS</h3>
-                ${generateRankingTable(top5, 1)}
+                ${generateRankingTable(top5, 1, scales)}
             </div>
 
             <div class="card">
                 <h3 class="currency-header" style="text-align: center; border-left: 3px solid var(--red);">📉 BOTTOM 5 PERFORMERS</h3>
-                ${generateRankingTable(bottom5, bottom5StartRank)}
+                ${generateRankingTable(bottom5, bottom5StartRank, scales)}
             </div>`;
 
             // Currency Groups
@@ -7439,7 +7442,7 @@ Full report in email.
 
                 html += `<div class="currency-group-section">`;
                 html += `<h3 class="currency-header">💱 ${currencyName} (${pairsWithResults.length} pairs)</h3>`;
-                html += generateCurrencyGroupTable(pairsWithResults);
+                html += generateCurrencyGroupTable(pairsWithResults, scales);
                 html += `<div class="summary-block" style="margin-top: 12px;"><strong>Group Average:</strong> <span style="font-family: var(--font-mono);">${formatThousand(groupAvg)}</span></div>`;
                 html += `</div>`;
             });
@@ -7448,7 +7451,7 @@ Full report in email.
             // Expandable Details
             html += '<div id="expandableDetailsContent">';
             pairResults.forEach(([pair, result]) => {
-                const avgColor = getPnLColor(result.avgPnL * 1000);
+                const avgColor = getPnLColor(result.avgPnL * 1000, scales.avgPnLMaxAbs);
                 html += `<div class="expandable-pair">`;
                 html += `<div class="pair-header" onclick="togglePairDetails('${pair}')">`;
                 html += `<span style="font-weight: bold; font-size: 16px;">▶ ${pair}</span>`;
@@ -7470,7 +7473,7 @@ Full report in email.
                 html += '</tr><tr><td><strong>P&L (k)</strong></td>';
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
-                    const color = getPnLColor(pnl);
+                    const color = getPnLColor(pnl, scales.strikePnLMaxAbs);
                     html += `<td style="background-color: ${color.bg}; color: ${color.text}; font-weight: bold;">${formatThousand(pnl)}</td>`;
                 });
                 html += '</tr></tbody></table>';
@@ -7767,13 +7770,15 @@ Full report in email.
             // If there are 3 pairs, bottom 5 should start at rank 1 (not -1)
             const bottom5StartRank = Math.max(1, pairResults.length - bottom5.length + 1);
 
-            document.getElementById('top5Table').innerHTML = generateRankingTable(top5, 1);
-            document.getElementById('bottom5Table').innerHTML = generateRankingTable(bottom5, bottom5StartRank);
+            // Calculate scales once using ALL pairs for consistent coloring across both tables
+            const scales = calculateTabScales(pairResults);
+
+            document.getElementById('top5Table').innerHTML = generateRankingTable(top5, 1, scales);
+            document.getElementById('bottom5Table').innerHTML = generateRankingTable(bottom5, bottom5StartRank, scales);
         }
 
-        function generateRankingTable(pairs, startRank) {
-            // Use per-table P&L scale so the largest magnitude in THIS table is the deepest shade
-            setGlobalPnLMaxAbsFromPairResults(pairs);
+        function generateRankingTable(pairs, startRank, scales) {
+            // scales: { strikePnLMaxAbs, avgPnLMaxAbs } - pre-calculated at tab level for consistent coloring
 
             let html = '<div class="card" style="overflow-x: auto;"><table class="data-table" style="min-width: 900px; font-size: 11px;"><thead><tr>';
             html += '<th class="sortable-header" onclick="sortTable(this, 0, \'number\')">Rank</th>';
@@ -7801,7 +7806,7 @@ Full report in email.
 
             pairs.forEach(([pair, result], idx) => {
                 const rank = startRank + idx;
-                const avgColor = getPnLColor(result.avgPnL * 1000);
+                const avgColor = getPnLColor(result.avgPnL * 1000, scales?.avgPnLMaxAbs);
 
                 html += '<tr>';
                 html += `<td>${rank}</td>`;
@@ -7814,7 +7819,7 @@ Full report in email.
                 // Individual strike P&Ls
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
-                    const color = getPnLColor(pnl);
+                    const color = getPnLColor(pnl, scales?.strikePnLMaxAbs);
                     const strikeType = strikeTypeMap[strikeName];
                     html += `<td style="text-align: center; width: 110px;">
                         <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${color.bg}; color: ${color.text}; font-weight: 500; font-size: 10px; cursor: pointer;"
@@ -7852,6 +7857,34 @@ Full report in email.
                 });
             });
             window.globalPnLMaxAbs = maxAbs > 0 ? maxAbs : 1;
+        }
+
+        // Calculate separate scales for a tab: individual strike P&Ls vs average P&L
+        // This allows avg P&L to have its own color intensity independent of individual strikes
+        function calculateTabScales(pairResults) {
+            let strikePnLMaxAbs = 0;  // For individual strikes (10Δ Put, 25Δ Put, ATM, 25Δ Call, 10Δ Call)
+            let avgPnLMaxAbs = 0;     // For average P&L column
+
+            pairResults.forEach(([_, result]) => {
+                if (!result) return;
+
+                // Average P&L scale (note: avgPnL is in units, multiply by 1000 for display)
+                avgPnLMaxAbs = Math.max(avgPnLMaxAbs, Math.abs((result.avgPnL || 0) * 1000));
+
+                // Individual strike P&L scale
+                const strikes = result.strikes || {};
+                ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
+                    const pnl = strikes[strikeName]?.finalPnL;
+                    if (pnl !== undefined && pnl !== null) {
+                        strikePnLMaxAbs = Math.max(strikePnLMaxAbs, Math.abs(pnl));
+                    }
+                });
+            });
+
+            return {
+                strikePnLMaxAbs: strikePnLMaxAbs > 0 ? strikePnLMaxAbs : 1,
+                avgPnLMaxAbs: avgPnLMaxAbs > 0 ? avgPnLMaxAbs : 1
+            };
         }
 
         function displayCurrencyGroups(pairResults) {
@@ -7920,8 +7953,9 @@ Full report in email.
             return blocks;
         }
 
-        function generateCurrencyGroupTableForResults(pairs) {
+        function generateCurrencyGroupTableForResults(pairs, scales) {
             // This version takes pairs as [pair, result] tuples
+            // scales: { strikePnLMaxAbs, avgPnLMaxAbs } - pre-calculated for consistent coloring
             let html = '<table class="data-table" style="width: 100%; border-collapse: collapse; margin: 10px 0;"><thead><tr>';
             html += '<th class="sortable-header" onclick="sortTable(this, 0, \'string\')">Pair</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 1, \'number\')">Avg P&L</th>';
@@ -7945,7 +7979,7 @@ Full report in email.
             };
 
             pairs.forEach(([pair, result]) => {
-                const avgColor = getPnLColor(result.avgPnL * 1000);
+                const avgColor = getPnLColor(result.avgPnL * 1000, scales?.avgPnLMaxAbs);
 
                 html += '<tr>';
                 html += `<td style="font-weight: bold;">${pair}</td>`;
@@ -7953,7 +7987,7 @@ Full report in email.
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
-                    const color = getPnLColor(pnl);
+                    const color = getPnLColor(pnl, scales?.strikePnLMaxAbs);
                     const strikeType = strikeTypeMap[strikeName];
                     html += `<td class="data-table-numbers chart-cell" style="background-color: ${color.bg}; color: ${color.text};" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</td>`;
                 });
@@ -7968,10 +8002,8 @@ Full report in email.
             return html;
         }
 
-        function generateCurrencyGroupTable(pairs) {
-            // Match Correlation 2 styling exactly
-            // Use per-table P&L scale so the largest magnitude in THIS table is the deepest shade
-            setGlobalPnLMaxAbsFromPairResults(pairs);
+        function generateCurrencyGroupTable(pairs, scales) {
+            // scales: { strikePnLMaxAbs, avgPnLMaxAbs } - pre-calculated at tab level for consistent coloring
 
             const strikeTypeMap = {
                 '10Δ Put': 'put10Delta',
@@ -8028,7 +8060,7 @@ Full report in email.
                     <tbody>`;
 
             pairs.forEach(([pair, result]) => {
-                const avgColor = getPnLColor(result.avgPnL * 1000);
+                const avgColor = getPnLColor(result.avgPnL * 1000, scales?.avgPnLMaxAbs);
 
                 html += `
                         <tr>
@@ -8039,7 +8071,7 @@ Full report in email.
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
-                    const color = getPnLColor(pnl);
+                    const color = getPnLColor(pnl, scales?.strikePnLMaxAbs);
                     const strikeType = strikeTypeMap[strikeName];
                     html += `
                             <td style="padding: 6px 8px; text-align: center; width: 100px;">
@@ -8075,11 +8107,13 @@ Full report in email.
             return html;
         }
 
-        function displayExpandableDetails(pairResults) {
+        function displayExpandableDetails(pairResults, scales) {
+            // scales: { strikePnLMaxAbs, avgPnLMaxAbs } - optional, will be calculated if not provided
+            const effectiveScales = scales || calculateTabScales(pairResults);
             let html = '';
 
             pairResults.forEach(([pair, result]) => {
-                const avgColor = getPnLColor(result.avgPnL * 1000);
+                const avgColor = getPnLColor(result.avgPnL * 1000, effectiveScales.avgPnLMaxAbs);
 
                 html += `<div class="expandable-pair">`;
                 html += `<div class="pair-header" onclick="togglePairDetails('${pair}')">`;
@@ -8105,7 +8139,7 @@ Full report in email.
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                     const pnl = result.strikes[strikeName].finalPnL;
-                    const color = getPnLColor(pnl);
+                    const color = getPnLColor(pnl, effectiveScales.strikePnLMaxAbs);
                     html += `<td style="background-color: ${color.bg}; color: ${color.text}; font-weight: bold;">${formatThousand(pnl)}</td>`;
                 });
                 html += '</tr></tbody></table>';
@@ -8471,10 +8505,13 @@ Full report in email.
 
         // ============ P&L COLOR CODING ============
 
-        function getPnLColor(pnl) {
-            // Symmetric, sign-preserving gradient around 0 using the global max abs P&L.
+        function getPnLColor(pnl, explicitMaxAbs) {
+            // Symmetric, sign-preserving gradient around 0 using the provided or global max abs P&L.
             // No greys for non-zero values: positives are always green-tinted, negatives always red-tinted.
-            const maxAbs = (window.globalPnLMaxAbs && !isNaN(window.globalPnLMaxAbs)) ? window.globalPnLMaxAbs : 1;
+            // explicitMaxAbs: if provided, use this; otherwise fall back to window.globalPnLMaxAbs
+            const maxAbs = (explicitMaxAbs && !isNaN(explicitMaxAbs) && explicitMaxAbs > 0)
+                ? explicitMaxAbs
+                : ((window.globalPnLMaxAbs && !isNaN(window.globalPnLMaxAbs)) ? window.globalPnLMaxAbs : 1);
             const abs = Math.abs(pnl);
             const t = Math.max(0, Math.min(1, abs / maxAbs));
             
@@ -9260,10 +9297,12 @@ Full report in email.
             summaryHTML += '</tr>';
 
             // Row 2: Final P&L (with color coding) - clickable
+            // Calculate max absolute P&L for consistent color scaling within this single-pair view
+            const singlePairMaxAbs = Math.max(...finalPnLs.map(pnl => Math.abs(pnl))) || 1;
             summaryHTML += '<tr><td class="row-label"><strong>Final P&L (k)</strong></td>';
             allResults.forEach((r, idx) => {
                 const finalPnL = finalPnLs[idx];
-                const pnlColors = getPnLColor(finalPnL);
+                const pnlColors = getPnLColor(finalPnL, singlePairMaxAbs);
                 summaryHTML += `<td data-strike-idx="${idx}" class="strike-cell" title="Click to view P&L chart" style="background-color: ${pnlColors.bg}; color: ${pnlColors.text}; font-weight: bold;">${formatThousand(finalPnL)}</td>`;
             });
             summaryHTML += '</tr>';
