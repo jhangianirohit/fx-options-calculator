@@ -7772,6 +7772,9 @@ Full report in email.
         }
 
         function generateRankingTable(pairs, startRank) {
+            // Use per-table P&L scale so the largest magnitude in THIS table is the deepest shade
+            setGlobalPnLMaxAbsFromPairResults(pairs);
+
             let html = '<div class="card" style="overflow-x: auto;"><table class="data-table" style="min-width: 900px; font-size: 11px;"><thead><tr>';
             html += '<th class="sortable-header" onclick="sortTable(this, 0, \'number\')">Rank</th>';
             html += '<th class="sortable-header" onclick="sortTable(this, 1, \'string\')">Pair</th>';
@@ -7782,8 +7785,8 @@ Full report in email.
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 6, \'number\')">25Δ Call</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 7, \'number\')">10Δ Call</th>';
             // Separator between P&L and Vol columns
-            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 8, \'number\')" style="border-left: 2px solid var(--border-strong);">Real Vol</th>';
-            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Impl Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 8, \'number\')" style="border-left: 2px solid var(--border-strong);">Impl Vol</th>';
+            html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 9, \'number\')">Real Vol</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 10, \'number\')">Vol Diff</th>';
             html += '</tr></thead><tbody>';
 
@@ -7820,8 +7823,8 @@ Full report in email.
                 });
 
                 // Vol columns (plain numbers, sortable)
-                html += `<td class="data-table-numbers" style="border-left: 2px solid var(--border-strong);">${(result.realizedVol * 100).toFixed(2)}%</td>`;
-                html += `<td class="data-table-numbers">${(result.impliedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers" style="border-left: 2px solid var(--border-strong);">${(result.impliedVol * 100).toFixed(2)}%</td>`;
+                html += `<td class="data-table-numbers">${(result.realizedVol * 100).toFixed(2)}%</td>`;
                 html += `<td class="data-table-numbers">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</td>`;
                 html += '</tr>';
             });
@@ -7967,6 +7970,9 @@ Full report in email.
 
         function generateCurrencyGroupTable(pairs) {
             // Match Correlation 2 styling exactly
+            // Use per-table P&L scale so the largest magnitude in THIS table is the deepest shade
+            setGlobalPnLMaxAbsFromPairResults(pairs);
+
             const strikeTypeMap = {
                 '10Δ Put': 'put10Delta',
                 '25Δ Put': 'put25Delta',
@@ -8014,8 +8020,8 @@ Full report in email.
             });
             
             html += `
-                            <th class="sortable-header numeric-header" onclick="sortTable(this, 7, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated); border-left: 2px solid var(--border-strong);">Real Vol</th>
-                            <th class="sortable-header numeric-header" onclick="sortTable(this, 8, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Impl Vol</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 7, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated); border-left: 2px solid var(--border-strong);">Impl Vol</th>
+                            <th class="sortable-header numeric-header" onclick="sortTable(this, 8, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Real Vol</th>
                             <th class="sortable-header numeric-header" onclick="sortTable(this, 9, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Vol Diff</th>
                         </tr>
                     </thead>
@@ -8051,10 +8057,10 @@ Full report in email.
                 
                 html += `
                             <td style="padding: 6px 8px; text-align: center; width: 100px; border-left: 2px solid var(--border-strong);">
-                                <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${realVolColor}; color: ${realVolText}; font-weight: 500; font-size: 10px;">${(result.realizedVol * 100).toFixed(2)}%</span>
+                                <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${implVolColor}; color: ${implVolText}; font-weight: 500; font-size: 10px;">${(result.impliedVol * 100).toFixed(2)}%</span>
                             </td>
                             <td style="padding: 6px 8px; text-align: center; width: 100px;">
-                                <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${implVolColor}; color: ${implVolText}; font-weight: 500; font-size: 10px;">${(result.impliedVol * 100).toFixed(2)}%</span>
+                                <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${realVolColor}; color: ${realVolText}; font-weight: 500; font-size: 10px;">${(result.realizedVol * 100).toFixed(2)}%</span>
                             </td>
                             <td style="padding: 6px 8px; text-align: center; width: 100px; ">
                                 <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${volDiffColor}; color: ${volDiffText}; font-weight: 600; font-size: 10px;">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</span>
