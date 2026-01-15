@@ -7399,44 +7399,88 @@ Full report in email.
         }
 
         // ============================================
-        // BASKET DECOMPOSITION MODULE
+        // BASKET DECOMPOSITION MODULE (Dynamic)
         // ============================================
 
-        // The 8 currencies in our universe
-        const BASKET_CURRENCIES = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY', 'USD'];
-
-        // The 7 basis pairs (all vs USD) - used as the basis for the covariance matrix
-        const BASIS_PAIRS = ['EURUSD', 'GBPUSD', 'AUDUSD', 'NZDUSD', 'USDCAD', 'USDCHF', 'USDJPY'];
-
-        // All 28 possible pairs from 8 currencies
-        const ALL_28_PAIRS = [
-            'EURUSD', 'EURGBP', 'EURAUD', 'EURNZD', 'EURCAD', 'EURCHF', 'EURJPY',
-            'GBPUSD', 'GBPAUD', 'GBPNZD', 'GBPCAD', 'GBPCHF', 'GBPJPY',
-            'AUDUSD', 'AUDNZD', 'AUDCAD', 'AUDCHF', 'AUDJPY',
-            'NZDUSD', 'NZDCAD', 'NZDCHF', 'NZDJPY',
-            'USDCAD', 'CADCHF', 'CADJPY',
-            'USDCHF', 'CHFJPY',
-            'USDJPY'
-        ];
+        // Market convention order for pair naming
+        const MARKET_ORDER = ['EUR', 'GBP', 'AUD', 'NZD', 'USD', 'CAD', 'CHF', 'JPY', 'SGD', 'HKD', 'NOK', 'SEK', 'DKK', 'ZAR', 'MXN', 'TRY', 'PLN', 'CZK', 'HUF', 'ILS', 'INR', 'KRW', 'TWD', 'THB', 'CNH', 'CNY', 'BRL'];
 
         // Store basket decomposition results globally
         window.basketDecompositionResults = null;
+        window.detectedBasketCurrencies = [];
+        window.detectedBasketPairs = [];
+
+        function detectCurrenciesFromVols() {
+            // Scan batchData.impliedVols to find all currencies present
+            const impliedVols = batchData.impliedVols || {};
+            const currencySet = new Set();
+
+            Object.keys(impliedVols).forEach(pair => {
+                if (pair.length === 6) {
+                    currencySet.add(pair.slice(0, 3));
+                    currencySet.add(pair.slice(3, 6));
+                }
+            });
+
+            // Sort by market convention
+            const currencies = Array.from(currencySet).sort((a, b) => {
+                const idxA = MARKET_ORDER.indexOf(a);
+                const idxB = MARKET_ORDER.indexOf(b);
+                // Unknown currencies go to end
+                const orderA = idxA === -1 ? 999 : idxA;
+                const orderB = idxB === -1 ? 999 : idxB;
+                return orderA - orderB;
+            });
+
+            return currencies;
+        }
+
+        function generateAllPairsForCurrencies(currencies) {
+            // Generate all possible pairs for the given currencies
+            const pairs = [];
+            for (let i = 0; i < currencies.length; i++) {
+                for (let j = i + 1; j < currencies.length; j++) {
+                    const pair = getCanonicalPairName(currencies[i], currencies[j]);
+                    pairs.push(pair);
+                }
+            }
+            return pairs;
+        }
+
+        function getCanonicalPairName(ccy1, ccy2) {
+            // Return pair name in market convention order
+            const idx1 = MARKET_ORDER.indexOf(ccy1);
+            const idx2 = MARKET_ORDER.indexOf(ccy2);
+            const order1 = idx1 === -1 ? 999 : idx1;
+            const order2 = idx2 === -1 ? 999 : idx2;
+
+            if (order1 < order2) {
+                return ccy1 + ccy2;
+            } else {
+                return ccy2 + ccy1;
+            }
+        }
 
         function generateBasketDecompositionTab() {
+            // Detect currencies from uploaded data
+            window.detectedBasketCurrencies = detectCurrenciesFromVols();
+            const n = window.detectedBasketCurrencies.length;
+            const requiredPairs = n * (n - 1) / 2;
+
             return `
                 <h2 style="margin-bottom: 24px;">🧺 FX Currency Basket Decomposition</h2>
 
                 <div class="card" style="margin-bottom: 24px;">
                     <h3 class="currency-header">About This Analysis</h3>
                     <p style="margin-bottom: 12px;">
-                        This module decomposes FX pair volatilities into contributions from "universal basket" exposures
-                        for each of the 8 major currencies (EUR, GBP, AUD, NZD, CAD, CHF, JPY, USD).
+                        This module decomposes FX pair volatilities into contributions from "universal basket" exposures.
+                        It automatically detects currencies from your uploaded data and builds the analysis dynamically.
                     </p>
                     <p style="margin-bottom: 12px;">
-                        <strong>Requirements:</strong> ATM implied volatilities for all 28 currency pair combinations.
+                        <strong>Detected:</strong> ${n} currencies → ${requiredPairs} possible pairs
                     </p>
                     <p style="color: var(--text-muted);">
-                        The analysis uses the 7 USD basis pairs to construct a covariance matrix, then derives
+                        The analysis uses USD basis pairs (where available) to construct a covariance matrix, then derives
                         basket volatilities and cross-currency correlations.
                     </p>
                 </div>
@@ -7461,27 +7505,38 @@ Full report in email.
 
         function generateBasketInputStatus() {
             const impliedVols = batchData.impliedVols || {};
+            const currencies = window.detectedBasketCurrencies || detectCurrenciesFromVols();
+            const requiredPairs = generateAllPairsForCurrencies(currencies);
+            const totalRequired = requiredPairs.length;
+
             const availablePairs = [];
             const missingPairs = [];
 
-            ALL_28_PAIRS.forEach(pair => {
-                // Check both pair and its inverse
-                const inversePair = pair.slice(3, 6) + pair.slice(0, 3);
-                if (impliedVols[pair] !== undefined || impliedVols[inversePair] !== undefined) {
+            requiredPairs.forEach(pair => {
+                if (getVolForPair(pair) !== null) {
                     availablePairs.push(pair);
                 } else {
                     missingPairs.push(pair);
                 }
             });
 
-            const coverage = (availablePairs.length / 28 * 100).toFixed(0);
-            const canCompute = missingPairs.length === 0;
+            window.detectedBasketPairs = availablePairs;
+
+            const coverage = totalRequired > 0 ? (availablePairs.length / totalRequired * 100).toFixed(0) : 0;
+            const canCompute = currencies.length >= 2 && missingPairs.length === 0;
 
             let html = `
+                <div style="margin-bottom: 16px;">
+                    <strong>Detected Currencies (${currencies.length}):</strong>
+                    <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${currencies.map(c => `<span style="background: var(--bg-hover); padding: 4px 12px; border-radius: 4px; font-family: var(--font-mono);">${c}</span>`).join('')}
+                    </div>
+                </div>
+
                 <div style="display: flex; gap: 24px; margin-bottom: 16px;">
                     <div>
                         <span style="font-size: 32px; font-weight: bold; color: ${canCompute ? 'var(--green)' : 'var(--yellow)'};">
-                            ${availablePairs.length}/28
+                            ${availablePairs.length}/${totalRequired}
                         </span>
                         <span style="color: var(--text-secondary);"> pairs available</span>
                     </div>
@@ -7492,19 +7547,28 @@ Full report in email.
                 </div>
             `;
 
-            if (missingPairs.length > 0) {
+            if (currencies.length < 2) {
+                html += `
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--red); border-radius: 8px; padding: 12px; margin-top: 12px;">
+                        <strong style="color: var(--red);">❌ Need at least 2 currencies to perform decomposition.</strong>
+                    </div>
+                `;
+            } else if (missingPairs.length > 0) {
                 html += `
                     <div style="background: rgba(234, 179, 8, 0.1); border: 1px solid var(--yellow); border-radius: 8px; padding: 12px; margin-top: 12px;">
                         <strong style="color: var(--yellow);">⚠️ Missing Pairs (${missingPairs.length}):</strong>
                         <div style="margin-top: 8px; font-family: var(--font-mono); font-size: 13px;">
                             ${missingPairs.join(', ')}
                         </div>
+                        <p style="margin-top: 8px; color: var(--text-secondary); font-size: 13px;">
+                            Note: Computation requires all ${totalRequired} pairs for ${currencies.length} currencies.
+                        </p>
                     </div>
                 `;
             } else {
                 html += `
                     <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid var(--green); border-radius: 8px; padding: 12px; margin-top: 12px;">
-                        <strong style="color: var(--green);">✅ All 28 pairs available - ready to compute!</strong>
+                        <strong style="color: var(--green);">✅ All ${totalRequired} pairs available for ${currencies.length} currencies - ready to compute!</strong>
                     </div>
                 `;
             }
@@ -7525,10 +7589,16 @@ Full report in email.
         }
 
         function computeBasketDecomposition() {
-            const impliedVols = batchData.impliedVols || {};
+            const currencies = window.detectedBasketCurrencies || detectCurrenciesFromVols();
+            const requiredPairs = generateAllPairsForCurrencies(currencies);
 
-            // Check we have all 28 pairs
-            const missingPairs = ALL_28_PAIRS.filter(pair => getVolForPair(pair) === null);
+            if (currencies.length < 2) {
+                alert('Need at least 2 currencies to perform decomposition.');
+                return;
+            }
+
+            // Check we have all required pairs
+            const missingPairs = requiredPairs.filter(pair => getVolForPair(pair) === null);
 
             if (missingPairs.length > 0) {
                 alert(`Cannot compute: Missing volatilities for ${missingPairs.length} pairs:\n${missingPairs.join(', ')}`);
@@ -7536,20 +7606,21 @@ Full report in email.
             }
 
             try {
-                // Step 1: Build the 7x7 covariance matrix for basis pairs
-                const covMatrix = buildCovarianceMatrix();
+                // Step 1: Build the NxN covariance matrix (N = currencies excluding USD, or all if no USD)
+                const covMatrix = buildCovarianceMatrixDynamic(currencies);
 
                 // Step 2: Calculate basket volatilities for each currency
-                const basketVols = calculateBasketVolatilities(covMatrix);
+                const basketVols = calculateBasketVolatilitiesDynamic(currencies, covMatrix);
 
                 // Step 3: Calculate pair decomposition percentages
-                const pairDecompositions = calculatePairDecompositions(basketVols, covMatrix);
+                const pairDecompositions = calculatePairDecompositionsDynamic(currencies, basketVols);
 
-                // Step 4: Calculate 8x8 basket correlation matrix
-                const basketCorrelations = calculateBasketCorrelationMatrix(covMatrix, basketVols);
+                // Step 4: Calculate NxN basket correlation matrix
+                const basketCorrelations = calculateBasketCorrelationMatrixDynamic(currencies, covMatrix, basketVols);
 
                 // Store results
                 window.basketDecompositionResults = {
+                    currencies,
                     covMatrix,
                     basketVols,
                     pairDecompositions,
@@ -7566,63 +7637,53 @@ Full report in email.
             }
         }
 
-        function buildCovarianceMatrix() {
-            // Build 7x7 covariance matrix for the 7 basis pairs
-            // Using the relationship: Cov(XY, ZW) can be derived from pair volatilities
-            // For cross pairs: σ²(AB) = σ²(A/USD) + σ²(B/USD) - 2*Cov(A/USD, B/USD)
-            // Rearranging: Cov(A/USD, B/USD) = (σ²(A/USD) + σ²(B/USD) - σ²(AB)) / 2
+        function buildCovarianceMatrixDynamic(currencies) {
+            // Build NxN covariance matrix for all currencies
+            // Using the relationship: For any pair AB, σ²(AB) gives us information
+            // We'll use direct pair volatilities to build the covariance structure
 
-            const n = 7;
+            const n = currencies.length;
             const cov = Array(n).fill(null).map(() => Array(n).fill(0));
 
-            // Map currency to basis pair index
-            // EUR=0, GBP=1, AUD=2, NZD=3, CAD=4, CHF=5, JPY=6
-            const currencyToIndex = {
-                'EUR': 0, 'GBP': 1, 'AUD': 2, 'NZD': 3, 'CAD': 4, 'CHF': 5, 'JPY': 6
-            };
+            // For each pair of currencies, get the pair volatility
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j < n; j++) {
+                    if (i === j) {
+                        // Diagonal: we need a "reference" volatility for this currency
+                        // Use average of all pairs involving this currency
+                        let sumVar = 0;
+                        let count = 0;
+                        for (let k = 0; k < n; k++) {
+                            if (k !== i) {
+                                const pair = getCanonicalPairName(currencies[i], currencies[k]);
+                                const vol = getVolForPair(pair);
+                                if (vol !== null) {
+                                    sumVar += vol * vol;
+                                    count++;
+                                }
+                            }
+                        }
+                        cov[i][i] = count > 0 ? sumVar / count : 0;
+                    } else if (j > i) {
+                        // Off-diagonal: derive covariance from triangle relationship
+                        // For currencies i, j: Cov(i,j) can be derived if we have a third currency k
+                        // σ²(ij) = Var(i) + Var(j) - 2*Cov(i,j)
+                        // Cov(i,j) = (Var(i) + Var(j) - σ²(ij)) / 2
 
-            // Get variances (diagonal elements)
-            BASIS_PAIRS.forEach((pair, i) => {
-                const vol = getVolForPair(pair);
-                cov[i][i] = vol * vol; // Variance
-            });
+                        const pair = getCanonicalPairName(currencies[i], currencies[j]);
+                        const pairVol = getVolForPair(pair);
 
-            // Get covariances (off-diagonal elements) from cross pair volatilities
-            // For currencies i and j (both non-USD), the cross pair gives us:
-            // σ²(cross) = σ²(i/USD) + σ²(j/USD) - 2*Cov(i,j)
-            // BUT we need to account for quote convention (some pairs are XXX/USD, others are USD/XXX)
+                        if (pairVol !== null) {
+                            const varI = cov[i][i];
+                            const varJ = cov[j][j];
+                            const pairVar = pairVol * pairVol;
 
-            const nonUsdCurrencies = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY'];
-
-            for (let i = 0; i < nonUsdCurrencies.length; i++) {
-                for (let j = i + 1; j < nonUsdCurrencies.length; j++) {
-                    const ccy1 = nonUsdCurrencies[i];
-                    const ccy2 = nonUsdCurrencies[j];
-
-                    // Find the cross pair vol
-                    const crossPair = findCrossPair(ccy1, ccy2);
-                    const crossVol = getVolForPair(crossPair);
-
-                    if (crossVol === null) {
-                        console.warn(`Missing cross pair: ${crossPair}`);
-                        continue;
+                            // Covariance from the variance relationship
+                            const covariance = (varI + varJ - pairVar) / 2;
+                            cov[i][j] = covariance;
+                            cov[j][i] = covariance;
+                        }
                     }
-
-                    // Get sign adjustments based on quote convention
-                    const sign1 = getUsdSign(ccy1);
-                    const sign2 = getUsdSign(ccy2);
-
-                    // σ²(cross) = σ²(ccy1/USD) + σ²(ccy2/USD) - 2*sign1*sign2*Cov(ccy1/USD, ccy2/USD)
-                    // Cov = sign1*sign2 * (σ²(ccy1/USD) + σ²(ccy2/USD) - σ²(cross)) / 2
-
-                    const var1 = cov[i][i];
-                    const var2 = cov[j][j];
-                    const crossVar = crossVol * crossVol;
-
-                    const covariance = sign1 * sign2 * (var1 + var2 - crossVar) / 2;
-
-                    cov[i][j] = covariance;
-                    cov[j][i] = covariance;
                 }
             }
 
@@ -7636,83 +7697,52 @@ Full report in email.
             return positiveConvention.includes(currency) ? 1 : -1;
         }
 
-        function findCrossPair(ccy1, ccy2) {
-            // Find the cross pair name for two non-USD currencies
-            // Order follows market convention
-            const marketOrder = ['EUR', 'GBP', 'AUD', 'NZD', 'USD', 'CAD', 'CHF', 'JPY'];
-            const idx1 = marketOrder.indexOf(ccy1);
-            const idx2 = marketOrder.indexOf(ccy2);
-
-            if (idx1 < idx2) {
-                return ccy1 + ccy2;
-            } else {
-                return ccy2 + ccy1;
-            }
-        }
-
-        function calculateBasketVolatilities(covMatrix) {
+        function calculateBasketVolatilitiesDynamic(currencies, covMatrix) {
             // For each currency, calculate its "basket volatility"
             // This represents the volatility of a portfolio that is long 1 unit of that currency
             // against an equal-weighted basket of all other currencies
 
             const basketVols = {};
-            const n = 7; // Number of non-USD currencies
+            const n = currencies.length;
 
-            // For non-USD currencies: basket vol is derived from the covariance matrix
-            const nonUsdCurrencies = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY'];
-
-            nonUsdCurrencies.forEach((ccy, i) => {
+            currencies.forEach((ccy, i) => {
                 // Basket variance for currency i:
-                // Var(basket_i) = (1/7) * Σ_j Var(i/j) where j ≠ i
-                // For the 7 non-USD currencies, we sum variance against all 7 others (including USD)
+                // Var(basket_i) = (1/(n-1)) * Σ_j Var(i/j) where j ≠ i
 
                 let sumVar = 0;
-                const sign_i = getUsdSign(ccy);
+                let count = 0;
 
-                // Variance against USD (direct from diagonal)
-                sumVar += covMatrix[i][i];
-
-                // Variance against other non-USD currencies
-                nonUsdCurrencies.forEach((ccy2, j) => {
+                currencies.forEach((ccy2, j) => {
                     if (i === j) return;
 
-                    const sign_j = getUsdSign(ccy2);
-
-                    // Var(i/j) = Var(i/USD) + Var(j/USD) - 2*sign_i*sign_j*Cov(i/USD, j/USD)
-                    // But since we stored covariance with signs already factored:
-                    // Let's recalculate properly
-                    const crossPair = findCrossPair(ccy, ccy2);
-                    const crossVol = getVolForPair(crossPair);
-                    if (crossVol !== null) {
-                        sumVar += crossVol * crossVol;
+                    const pair = getCanonicalPairName(ccy, ccy2);
+                    const pairVol = getVolForPair(pair);
+                    if (pairVol !== null) {
+                        sumVar += pairVol * pairVol;
+                        count++;
                     }
                 });
 
-                // Average over 7 pairs (6 crosses + 1 USD pair)
-                const basketVar = sumVar / 7;
+                // Average over all pairs
+                const basketVar = count > 0 ? sumVar / count : 0;
                 basketVols[ccy] = Math.sqrt(basketVar);
             });
-
-            // For USD: basket variance is average of all 7 USD pairs
-            let usdSumVar = 0;
-            BASIS_PAIRS.forEach((pair, i) => {
-                usdSumVar += covMatrix[i][i];
-            });
-            basketVols['USD'] = Math.sqrt(usdSumVar / 7);
 
             return basketVols;
         }
 
-        function calculatePairDecompositions(basketVols, covMatrix) {
+        function calculatePairDecompositionsDynamic(currencies, basketVols) {
             // For each pair, calculate what percentage of variance comes from each currency
             const decompositions = {};
+            const allPairs = generateAllPairsForCurrencies(currencies);
 
-            ALL_28_PAIRS.forEach(pair => {
+            allPairs.forEach(pair => {
                 const ccy1 = pair.slice(0, 3);
                 const ccy2 = pair.slice(3, 6);
                 const pairVol = getVolForPair(pair);
 
                 if (pairVol === null) return;
+                if (!basketVols[ccy1] || !basketVols[ccy2]) return;
 
                 const pairVar = pairVol * pairVol;
                 const basketVar1 = basketVols[ccy1] * basketVols[ccy1];
@@ -7737,14 +7767,15 @@ Full report in email.
             return decompositions;
         }
 
-        function calculateBasketCorrelationMatrix(covMatrix, basketVols) {
-            // Calculate 8x8 correlation matrix between basket exposures
+        function calculateBasketCorrelationMatrixDynamic(currencies, covMatrix, basketVols) {
+            // Calculate NxN correlation matrix between basket exposures
             const correlations = {};
+            const n = currencies.length;
 
             // Initialize correlation matrix
-            BASKET_CURRENCIES.forEach(ccy1 => {
+            currencies.forEach(ccy1 => {
                 correlations[ccy1] = {};
-                BASKET_CURRENCIES.forEach(ccy2 => {
+                currencies.forEach(ccy2 => {
                     if (ccy1 === ccy2) {
                         correlations[ccy1][ccy2] = 1.0;
                     } else {
@@ -7753,37 +7784,23 @@ Full report in email.
                 });
             });
 
-            // For pairs of non-USD currencies, derive correlation from covariance matrix
-            const nonUsdCurrencies = ['EUR', 'GBP', 'AUD', 'NZD', 'CAD', 'CHF', 'JPY'];
-            const currencyToIndex = {
-                'EUR': 0, 'GBP': 1, 'AUD': 2, 'NZD': 3, 'CAD': 4, 'CHF': 5, 'JPY': 6
-            };
-
-            // Correlation between non-USD currency baskets
-            for (let i = 0; i < nonUsdCurrencies.length; i++) {
-                for (let j = i + 1; j < nonUsdCurrencies.length; j++) {
-                    const ccy1 = nonUsdCurrencies[i];
-                    const ccy2 = nonUsdCurrencies[j];
+            // For each pair of currencies, calculate implied correlation
+            for (let i = 0; i < n; i++) {
+                for (let j = i + 1; j < n; j++) {
+                    const ccy1 = currencies[i];
+                    const ccy2 = currencies[j];
 
                     const vol1 = basketVols[ccy1];
                     const vol2 = basketVols[ccy2];
 
                     if (vol1 > 0 && vol2 > 0) {
-                        // Use the cross pair implied correlation
-                        const crossPair = findCrossPair(ccy1, ccy2);
-                        const crossVol = getVolForPair(crossPair);
-                        const basisVol1 = getVolForPair(getBasisPair(ccy1));
-                        const basisVol2 = getVolForPair(getBasisPair(ccy2));
+                        // Get the direct pair volatility
+                        const pair = getCanonicalPairName(ccy1, ccy2);
+                        const pairVol = getVolForPair(pair);
 
-                        if (crossVol !== null && basisVol1 !== null && basisVol2 !== null) {
-                            // ρ = (σ1² + σ2² - σcross²) / (2 * σ1 * σ2)
-                            // Account for sign convention
-                            const sign1 = getUsdSign(ccy1);
-                            const sign2 = getUsdSign(ccy2);
-
-                            let rho = (basisVol1 * basisVol1 + basisVol2 * basisVol2 - crossVol * crossVol) /
-                                      (2 * basisVol1 * basisVol2);
-                            rho = rho * sign1 * sign2;
+                        if (pairVol !== null) {
+                            // Implied correlation: ρ = (σ1² + σ2² - σpair²) / (2 * σ1 * σ2)
+                            let rho = (vol1 * vol1 + vol2 * vol2 - pairVol * pairVol) / (2 * vol1 * vol2);
 
                             // Clamp to valid correlation range
                             rho = Math.max(-1, Math.min(1, rho));
@@ -7794,25 +7811,6 @@ Full report in email.
                     }
                 }
             }
-
-            // Correlation of non-USD currencies with USD basket
-            // USD basket has negative correlation with risk currencies on average
-            nonUsdCurrencies.forEach((ccy, i) => {
-                // Use the fact that USD is the other side of all basis pairs
-                // Average correlation of ccy basket with USD basket
-                const basisVol = getVolForPair(getBasisPair(ccy));
-                const sign = getUsdSign(ccy);
-
-                if (basisVol !== null && basketVols[ccy] > 0 && basketVols['USD'] > 0) {
-                    // Simplified: use -1 * sign * (basisVar / (basketVol_ccy * basketVol_USD))
-                    // This captures the inverse relationship
-                    let rho = -sign * (basisVol * basisVol) / (basketVols[ccy] * basketVols['USD'] * 2);
-                    rho = Math.max(-1, Math.min(1, rho));
-
-                    correlations[ccy]['USD'] = rho;
-                    correlations['USD'][ccy] = rho;
-                }
-            });
 
             return correlations;
         }
@@ -7833,12 +7831,15 @@ Full report in email.
             const results = window.basketDecompositionResults;
             if (!results) return '';
 
+            const currencies = results.currencies || window.detectedBasketCurrencies || [];
+            const n = currencies.length;
+
             let html = '';
 
             // Table 1: Basket Volatilities
             html += `
                 <div class="card" style="margin-bottom: 24px;">
-                    <h3 class="currency-header">📊 Basket Volatilities</h3>
+                    <h3 class="currency-header">📊 Basket Volatilities (${n} currencies)</h3>
                     <p style="margin-bottom: 16px; color: var(--text-secondary);">
                         Annualized volatility of each currency's "basket" exposure against all others.
                     </p>
@@ -7854,12 +7855,12 @@ Full report in email.
             `;
 
             // Sort currencies by basket vol
-            const sortedCurrencies = BASKET_CURRENCIES.slice().sort((a, b) =>
-                results.basketVols[b] - results.basketVols[a]
+            const sortedCurrencies = currencies.slice().sort((a, b) =>
+                (results.basketVols[b] || 0) - (results.basketVols[a] || 0)
             );
 
             sortedCurrencies.forEach((ccy, rank) => {
-                const vol = results.basketVols[ccy] * 100;
+                const vol = (results.basketVols[ccy] || 0) * 100;
                 const volColor = vol > 10 ? 'var(--red)' : vol > 7 ? 'var(--yellow)' : 'var(--green)';
                 html += `
                     <tr>
@@ -7933,10 +7934,10 @@ Full report in email.
                 </div>
             `;
 
-            // Table 3: 8x8 Correlation Matrix
+            // Table 3: NxN Correlation Matrix
             html += `
                 <div class="card" style="margin-bottom: 24px;">
-                    <h3 class="currency-header">🔗 8×8 Basket Correlation Matrix</h3>
+                    <h3 class="currency-header">🔗 ${n}×${n} Basket Correlation Matrix</h3>
                     <p style="margin-bottom: 16px; color: var(--text-secondary);">
                         Implied correlations between currency basket exposures.
                     </p>
@@ -7945,16 +7946,16 @@ Full report in email.
                             <thead>
                                 <tr>
                                     <th></th>
-                                    ${BASKET_CURRENCIES.map(c => `<th>${c}</th>`).join('')}
+                                    ${currencies.map(c => `<th>${c}</th>`).join('')}
                                 </tr>
                             </thead>
                             <tbody>
             `;
 
-            BASKET_CURRENCIES.forEach(ccy1 => {
+            currencies.forEach(ccy1 => {
                 html += `<tr><td><strong>${ccy1}</strong></td>`;
-                BASKET_CURRENCIES.forEach(ccy2 => {
-                    const corr = results.basketCorrelations[ccy1][ccy2];
+                currencies.forEach(ccy2 => {
+                    const corr = (results.basketCorrelations[ccy1] && results.basketCorrelations[ccy1][ccy2]) || 0;
                     const color = getCorrelationColor(corr);
                     html += `<td style="background-color: ${color}; text-align: center;">${corr.toFixed(2)}</td>`;
                 });
