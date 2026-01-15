@@ -7461,11 +7461,80 @@ Full report in email.
             }
         }
 
+        function findLargestCompleteBasket(allCurrencies) {
+            // Find the largest subset of currencies where ALL pairs have data
+            // This is essentially finding a maximum clique in a graph where:
+            // - Nodes are currencies
+            // - Edges exist if we have vol data for that pair
+
+            if (allCurrencies.length <= 1) return allCurrencies;
+
+            // Build adjacency: which currency pairs have data
+            const hasData = {};
+            allCurrencies.forEach(c1 => {
+                hasData[c1] = {};
+                allCurrencies.forEach(c2 => {
+                    if (c1 !== c2) {
+                        const pair = getCanonicalPairName(c1, c2);
+                        hasData[c1][c2] = getVolForPair(pair) !== null;
+                    }
+                });
+            });
+
+            // Try subsets from largest to smallest
+            // For N currencies, try all subsets of size N, then N-1, etc.
+            for (let size = allCurrencies.length; size >= 2; size--) {
+                const subsets = getCombinations(allCurrencies, size);
+
+                for (const subset of subsets) {
+                    if (isCompleteBasket(subset, hasData)) {
+                        return subset;
+                    }
+                }
+            }
+
+            return []; // No valid basket found
+        }
+
+        function getCombinations(arr, size) {
+            // Generate all combinations of 'size' elements from 'arr'
+            if (size === 0) return [[]];
+            if (arr.length === 0) return [];
+
+            const result = [];
+
+            function combine(start, current) {
+                if (current.length === size) {
+                    result.push([...current]);
+                    return;
+                }
+                for (let i = start; i < arr.length; i++) {
+                    current.push(arr[i]);
+                    combine(i + 1, current);
+                    current.pop();
+                }
+            }
+
+            combine(0, []);
+            return result;
+        }
+
+        function isCompleteBasket(currencies, hasData) {
+            // Check if all pairs in this currency subset have data
+            for (let i = 0; i < currencies.length; i++) {
+                for (let j = i + 1; j < currencies.length; j++) {
+                    if (!hasData[currencies[i]][currencies[j]]) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
         function generateBasketDecompositionTab() {
-            // Detect currencies from uploaded data
+            // Detect currencies and find largest complete basket
             window.detectedBasketCurrencies = detectCurrenciesFromVols();
-            const n = window.detectedBasketCurrencies.length;
-            const requiredPairs = n * (n - 1) / 2;
+            window.validBasketCurrencies = findLargestCompleteBasket(window.detectedBasketCurrencies);
 
             return `
                 <h2 style="margin-bottom: 24px;">🧺 FX Currency Basket Decomposition</h2>
@@ -7474,13 +7543,11 @@ Full report in email.
                     <h3 class="currency-header">About This Analysis</h3>
                     <p style="margin-bottom: 12px;">
                         This module decomposes FX pair volatilities into contributions from "universal basket" exposures.
-                        It automatically detects currencies from your uploaded data and builds the analysis dynamically.
-                    </p>
-                    <p style="margin-bottom: 12px;">
-                        <strong>Detected:</strong> ${n} currencies → ${requiredPairs} possible pairs
+                        It automatically detects currencies from your uploaded data and finds the <strong>largest complete basket</strong>
+                        (the largest set of currencies where all pairwise vols are available).
                     </p>
                     <p style="color: var(--text-muted);">
-                        The analysis uses USD basis pairs (where available) to construct a covariance matrix, then derives
+                        The analysis constructs a covariance matrix from pair volatilities, then derives
                         basket volatilities and cross-currency correlations.
                     </p>
                 </div>
@@ -7505,70 +7572,86 @@ Full report in email.
 
         function generateBasketInputStatus() {
             const impliedVols = batchData.impliedVols || {};
-            const currencies = window.detectedBasketCurrencies || detectCurrenciesFromVols();
-            const requiredPairs = generateAllPairsForCurrencies(currencies);
-            const totalRequired = requiredPairs.length;
 
-            const availablePairs = [];
-            const missingPairs = [];
+            // Detect all currencies present in data
+            const allCurrencies = detectCurrenciesFromVols();
+            window.detectedBasketCurrencies = allCurrencies;
 
-            requiredPairs.forEach(pair => {
-                if (getVolForPair(pair) !== null) {
-                    availablePairs.push(pair);
-                } else {
-                    missingPairs.push(pair);
-                }
-            });
+            // Find the largest complete basket
+            const validBasket = findLargestCompleteBasket(allCurrencies);
+            window.validBasketCurrencies = validBasket;
 
-            window.detectedBasketPairs = availablePairs;
+            const excludedCurrencies = allCurrencies.filter(c => !validBasket.includes(c));
 
-            const coverage = totalRequired > 0 ? (availablePairs.length / totalRequired * 100).toFixed(0) : 0;
-            const canCompute = currencies.length >= 2 && missingPairs.length === 0;
+            const requiredPairs = generateAllPairsForCurrencies(validBasket);
+            const totalPairsInData = Object.keys(impliedVols).length;
+            const basketPairCount = requiredPairs.length;
+
+            const canCompute = validBasket.length >= 2;
 
             let html = `
                 <div style="margin-bottom: 16px;">
-                    <strong>Detected Currencies (${currencies.length}):</strong>
+                    <strong>Currencies in Data (${allCurrencies.length}):</strong>
                     <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
-                        ${currencies.map(c => `<span style="background: var(--bg-hover); padding: 4px 12px; border-radius: 4px; font-family: var(--font-mono);">${c}</span>`).join('')}
+                        ${allCurrencies.map(c => {
+                            const isValid = validBasket.includes(c);
+                            const style = isValid
+                                ? 'background: rgba(34, 197, 94, 0.2); border: 1px solid var(--green);'
+                                : 'background: rgba(234, 179, 8, 0.2); border: 1px solid var(--yellow); opacity: 0.7;';
+                            return `<span style="${style} padding: 4px 12px; border-radius: 4px; font-family: var(--font-mono);">${c}${isValid ? '' : ' ⚠️'}</span>`;
+                        }).join('')}
                     </div>
                 </div>
 
                 <div style="display: flex; gap: 24px; margin-bottom: 16px;">
                     <div>
-                        <span style="font-size: 32px; font-weight: bold; color: ${canCompute ? 'var(--green)' : 'var(--yellow)'};">
-                            ${availablePairs.length}/${totalRequired}
+                        <span style="font-size: 32px; font-weight: bold; color: var(--green);">
+                            ${validBasket.length}
                         </span>
-                        <span style="color: var(--text-secondary);"> pairs available</span>
+                        <span style="color: var(--text-secondary);"> currencies in complete basket</span>
                     </div>
                     <div>
-                        <span style="font-size: 32px; font-weight: bold;">${coverage}%</span>
-                        <span style="color: var(--text-secondary);"> coverage</span>
+                        <span style="font-size: 32px; font-weight: bold;">${basketPairCount}</span>
+                        <span style="color: var(--text-secondary);"> pairs for analysis</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 32px; font-weight: bold; color: var(--text-muted);">${totalPairsInData}</span>
+                        <span style="color: var(--text-secondary);"> pairs uploaded</span>
                     </div>
                 </div>
             `;
 
-            if (currencies.length < 2) {
+            if (validBasket.length < 2) {
                 html += `
                     <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--red); border-radius: 8px; padding: 12px; margin-top: 12px;">
-                        <strong style="color: var(--red);">❌ Need at least 2 currencies to perform decomposition.</strong>
+                        <strong style="color: var(--red);">❌ Cannot find a complete basket with at least 2 currencies.</strong>
+                        <p style="margin-top: 8px; color: var(--text-secondary);">
+                            A complete basket requires all pairwise volatilities between the included currencies.
+                        </p>
                     </div>
                 `;
-            } else if (missingPairs.length > 0) {
+            } else if (excludedCurrencies.length > 0) {
                 html += `
+                    <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid var(--green); border-radius: 8px; padding: 12px; margin-top: 12px;">
+                        <strong style="color: var(--green);">✅ Found complete basket with ${validBasket.length} currencies - ready to compute!</strong>
+                        <div style="margin-top: 8px; font-family: var(--font-mono);">
+                            ${validBasket.join(', ')}
+                        </div>
+                    </div>
                     <div style="background: rgba(234, 179, 8, 0.1); border: 1px solid var(--yellow); border-radius: 8px; padding: 12px; margin-top: 12px;">
-                        <strong style="color: var(--yellow);">⚠️ Missing Pairs (${missingPairs.length}):</strong>
+                        <strong style="color: var(--yellow);">⚠️ Excluded Currencies (${excludedCurrencies.length}):</strong>
                         <div style="margin-top: 8px; font-family: var(--font-mono); font-size: 13px;">
-                            ${missingPairs.join(', ')}
+                            ${excludedCurrencies.join(', ')}
                         </div>
                         <p style="margin-top: 8px; color: var(--text-secondary); font-size: 13px;">
-                            Note: Computation requires all ${totalRequired} pairs for ${currencies.length} currencies.
+                            These currencies are missing one or more pair vols needed to form a complete basket.
                         </p>
                     </div>
                 `;
             } else {
                 html += `
                     <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid var(--green); border-radius: 8px; padding: 12px; margin-top: 12px;">
-                        <strong style="color: var(--green);">✅ All ${totalRequired} pairs available for ${currencies.length} currencies - ready to compute!</strong>
+                        <strong style="color: var(--green);">✅ All ${basketPairCount} pairs available for ${validBasket.length} currencies - ready to compute!</strong>
                     </div>
                 `;
             }
@@ -7589,24 +7672,16 @@ Full report in email.
         }
 
         function computeBasketDecomposition() {
-            const currencies = window.detectedBasketCurrencies || detectCurrenciesFromVols();
-            const requiredPairs = generateAllPairsForCurrencies(currencies);
+            // Use the pre-computed valid basket (largest complete subset)
+            const currencies = window.validBasketCurrencies || findLargestCompleteBasket(detectCurrenciesFromVols());
 
             if (currencies.length < 2) {
-                alert('Need at least 2 currencies to perform decomposition.');
-                return;
-            }
-
-            // Check we have all required pairs
-            const missingPairs = requiredPairs.filter(pair => getVolForPair(pair) === null);
-
-            if (missingPairs.length > 0) {
-                alert(`Cannot compute: Missing volatilities for ${missingPairs.length} pairs:\n${missingPairs.join(', ')}`);
+                alert('Cannot find a complete basket with at least 2 currencies.\nA complete basket requires all pairwise volatilities between the included currencies.');
                 return;
             }
 
             try {
-                // Step 1: Build the NxN covariance matrix (N = currencies excluding USD, or all if no USD)
+                // Step 1: Build the NxN covariance matrix
                 const covMatrix = buildCovarianceMatrixDynamic(currencies);
 
                 // Step 2: Calculate basket volatilities for each currency
