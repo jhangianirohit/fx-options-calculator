@@ -1582,6 +1582,73 @@ th {
     color: var(--text-white) !important;
 }
 
+/* Sessions tab styles */
+.sessions-upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 16px;
+}
+.sessions-upload-area:hover {
+    border-color: var(--blue);
+    background: rgba(96, 165, 250, 0.05);
+}
+.sessions-upload-area.drag-over {
+    border-color: var(--green);
+    background: rgba(74, 222, 128, 0.08);
+}
+.session-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.session-list-table th, .session-list-table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+.session-list-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+.config-mismatch-banner {
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    color: var(--yellow);
+    font-size: 13px;
+}
+.aggregate-header-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+.aggregate-header-card h3 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+}
+.aggregate-meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.aggregate-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
     </style>
 </head>
 <body>
@@ -2087,6 +2154,9 @@ th {
             availableCrosses: [],
             unavailableCrosses: []
         };
+
+        // ============ SESSION SAVE/LOAD STATE ============
+        window.loadedSessions = [];
 
         function handleExcelUpload(event) {
             const file = event.target.files[0];
@@ -5893,6 +5963,752 @@ Full report in email.
             }
         }
 
+        // ============ SESSION SAVE / LOAD / AGGREGATE ============
+
+        function generateSessionLabel() {
+            const config = window.analysisConfig || {};
+            const pairCount = (window.analyzedPairs || []).length;
+            const timestamps = window.uploadedTimestamps || batchData.timestamps || [];
+            let dateStr = '';
+            if (timestamps.length > 0) {
+                const d = new Date(timestamps[0]);
+                dateStr = d.toISOString().slice(0, 10);
+            } else {
+                dateStr = new Date().toISOString().slice(0, 10);
+            }
+            const hours = config.optionExpiryHours || '';
+            return `FX_Session_${dateStr}_${hours ? hours + 'h' : 'batch'}_${pairCount}pairs`;
+        }
+
+        function serializeDataRange(range) {
+            if (!range) return null;
+            return {
+                start: range.start instanceof Date ? range.start.toISOString() : String(range.start),
+                end: range.end instanceof Date ? range.end.toISOString() : String(range.end),
+                points: range.points,
+                minutes: range.minutes,
+                hours: range.hours
+            };
+        }
+
+        function saveSessionToJSON() {
+            const pnlResults = window.batchAnalysisResults;
+            if (!pnlResults || Object.keys(pnlResults).length === 0) {
+                alert('No analysis results to save. Run a batch analysis first.');
+                return;
+            }
+
+            const analyzedPairs = Object.keys(pnlResults).filter(p => !pnlResults[p].error);
+            if (analyzedPairs.length === 0) {
+                alert('No valid pair results to save.');
+                return;
+            }
+
+            // Build cleaned pnlResults - only serializable summary data
+            const cleanedPnL = {};
+            analyzedPairs.forEach(pair => {
+                const r = pnlResults[pair];
+                const cleanStrikes = {};
+                if (r.strikes) {
+                    Object.keys(r.strikes).forEach(sName => {
+                        const s = r.strikes[sName];
+                        cleanStrikes[sName] = {
+                            strikePrice: s.strikePrice,
+                            finalPnL: s.finalPnL
+                        };
+                    });
+                }
+                cleanedPnL[pair] = {
+                    avgPnL: r.avgPnL,
+                    strikes: cleanStrikes,
+                    realizedVol: r.realizedVol,
+                    impliedVol: r.impliedVol,
+                    volDiff: r.volDiff
+                };
+            });
+
+            const timestamps = window.uploadedTimestamps || batchData.timestamps || [];
+            const analysisData = window.currentAnalysisData || batchData;
+
+            const session = {
+                version: 1,
+                type: 'fx_session',
+                savedAt: new Date().toISOString(),
+                sessionLabel: generateSessionLabel(),
+                analysisConfig: window.analysisConfig || {},
+                dataInfo: {
+                    pairNames: batchData.pairNames || [],
+                    currencies: batchData.currencies || window.currencies || [],
+                    frequency: batchData.frequency,
+                    fullDataRange: serializeDataRange(batchData.fullDataRange),
+                    analysisWindow: timestamps.length > 0 ? {
+                        start: new Date(timestamps[0]).toISOString(),
+                        end: new Date(timestamps[timestamps.length - 1]).toISOString(),
+                        points: timestamps.length
+                    } : null,
+                    impliedVols: batchData.impliedVols ? Object.fromEntries(
+                        Object.entries(batchData.impliedVols).filter(([_, v]) => v != null)
+                    ) : {}
+                },
+                pnlResults: cleanedPnL,
+                correlationResults: window.correlationAnalysisResults || null,
+                correlationMatrix: window.correlationMatrix || null,
+                basketDecomposition: window.basketDecompositionResults || null
+            };
+
+            const label = session.sessionLabel;
+            const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = label + '.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // Show status
+            const statusEl = document.getElementById('exportStatusOverview') || document.getElementById('sessionSaveStatus');
+            if (statusEl) {
+                statusEl.innerHTML = `Session saved: ${label}.json`;
+                statusEl.style.color = 'var(--green)';
+                setTimeout(() => { statusEl.innerHTML = ''; }, 5000);
+            }
+        }
+
+        function validateSession(session) {
+            if (!session || typeof session !== 'object') return false;
+            if (session.type !== 'fx_session') return false;
+            if (!session.pnlResults || typeof session.pnlResults !== 'object') return false;
+            const pairs = Object.keys(session.pnlResults);
+            return pairs.length > 0 && pairs.some(p => session.pnlResults[p].avgPnL != null);
+        }
+
+        function loadSessionFiles(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            let remaining = files.length;
+            let loaded = 0;
+            let errors = [];
+
+            Array.from(files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const session = JSON.parse(e.target.result);
+                        if (!validateSession(session)) {
+                            errors.push(`${file.name}: Invalid session file`);
+                        } else {
+                            // Deduplicate by savedAt timestamp
+                            const isDupe = window.loadedSessions.some(s => s.savedAt === session.savedAt);
+                            if (!isDupe) {
+                                window.loadedSessions.push(session);
+                                loaded++;
+                            } else {
+                                errors.push(`${file.name}: Duplicate session (already loaded)`);
+                            }
+                        }
+                    } catch (err) {
+                        errors.push(`${file.name}: ${err.message}`);
+                    }
+                    remaining--;
+                    if (remaining === 0) {
+                        // Sort by analysis window start date
+                        window.loadedSessions.sort((a, b) => {
+                            const aDate = a.dataInfo?.analysisWindow?.start || a.savedAt;
+                            const bDate = b.dataInfo?.analysisWindow?.start || b.savedAt;
+                            return new Date(aDate) - new Date(bDate);
+                        });
+                        updateSessionsPanel();
+                        if (errors.length > 0) {
+                            alert('Some files had issues:\n' + errors.join('\n'));
+                        }
+                    }
+                };
+                reader.readAsText(file);
+            });
+            // Reset input so same file can be re-loaded
+            event.target.value = '';
+        }
+
+        function removeSession(index) {
+            window.loadedSessions.splice(index, 1);
+            updateSessionsPanel();
+        }
+
+        function clearAllSessions() {
+            window.loadedSessions = [];
+            updateSessionsPanel();
+        }
+
+        function updateSessionsPanel() {
+            const container = document.getElementById('tab-sessions');
+            if (!container) return;
+            container.innerHTML = generateSessionsTab();
+        }
+
+        function generateSessionsTab() {
+            const sessions = window.loadedSessions;
+            let html = '';
+
+            // Save current session button
+            html += `
+                <div class="card" style="margin-bottom: 16px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 15px;">Save Current Session</h3>
+                    <button class="btn btn-primary" onclick="saveSessionToJSON()">
+                        Save Session as JSON
+                    </button>
+                    <span id="sessionSaveStatus" style="margin-left: 12px; font-size: 13px;"></span>
+                </div>
+            `;
+
+            // File upload area
+            html += `
+                <div class="card" style="margin-bottom: 16px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 15px;">Load Sessions</h3>
+                    <div class="sessions-upload-area" id="sessionDropZone"
+                         onclick="document.getElementById('sessionFileInput').click()"
+                         ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                         ondragleave="this.classList.remove('drag-over')"
+                         ondrop="event.preventDefault(); this.classList.remove('drag-over'); handleSessionDrop(event)">
+                        <div style="font-size: 24px; margin-bottom: 8px;">+</div>
+                        <div style="color: var(--text-muted); font-size: 13px;">
+                            Click or drag JSON session files here<br>
+                            <span style="font-size: 11px;">Multiple files supported</span>
+                        </div>
+                    </div>
+                    <input type="file" id="sessionFileInput" multiple accept=".json"
+                           onchange="loadSessionFiles(event)" style="display: none;">
+                </div>
+            `;
+
+            // Loaded sessions list
+            if (sessions.length > 0) {
+                html += `
+                    <div class="card" style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <h3 style="margin: 0; font-size: 15px;">Loaded Sessions (${sessions.length})</h3>
+                            <button class="btn btn-secondary" onclick="clearAllSessions()" style="font-size: 12px; padding: 4px 10px;">
+                                Clear All
+                            </button>
+                        </div>
+                        <table class="session-list-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Label</th>
+                                    <th>Date Range</th>
+                                    <th>Pairs</th>
+                                    <th>Config</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                sessions.forEach((s, i) => {
+                    const pairCount = Object.keys(s.pnlResults || {}).length;
+                    const aw = s.dataInfo?.analysisWindow;
+                    let dateRange = 'N/A';
+                    if (aw) {
+                        const start = new Date(aw.start);
+                        const end = new Date(aw.end);
+                        dateRange = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+                    }
+                    const config = s.analysisConfig || {};
+                    const configStr = [config.rebalancingFrequency, config.optionExpiry].filter(Boolean).join(', ');
+
+                    html += `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td style="font-weight: 500;">${s.sessionLabel || 'Unnamed'}</td>
+                            <td>${dateRange}</td>
+                            <td>${pairCount}</td>
+                            <td style="font-size: 11px; color: var(--text-muted);">${configStr || 'N/A'}</td>
+                            <td>
+                                <button onclick="removeSession(${i})" style="background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px;" title="Remove">x</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                // Aggregate button
+                html += `
+                    <div style="margin-bottom: 20px; text-align: center;">
+                        <button class="btn btn-primary" onclick="computeAndDisplayAggregate()" style="font-size: 14px; padding: 10px 24px;">
+                            Generate Aggregate View (${sessions.length} sessions)
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Aggregate results container
+            html += `<div id="aggregateResultsContainer"></div>`;
+
+            return html;
+        }
+
+        function handleSessionDrop(event) {
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                // Simulate file input change
+                const fakeEvent = { target: { files: files, value: '' } };
+                loadSessionFiles(fakeEvent);
+            }
+        }
+
+        // ============ AGGREGATION LOGIC ============
+
+        function aggregateSessions(sessions) {
+            if (!sessions || sessions.length === 0) return null;
+
+            // Aggregate P&L
+            const pairAcc = {}; // pair -> { sums, count }
+            sessions.forEach(session => {
+                Object.entries(session.pnlResults || {}).forEach(([pair, result]) => {
+                    if (result.avgPnL == null) return;
+                    if (!pairAcc[pair]) {
+                        pairAcc[pair] = {
+                            avgPnLSum: 0, strikeSums: {}, realizedVolSum: 0, impliedVolSum: 0, volDiffSum: 0, count: 0
+                        };
+                    }
+                    const acc = pairAcc[pair];
+                    acc.avgPnLSum += result.avgPnL;
+                    acc.realizedVolSum += (result.realizedVol || 0);
+                    acc.impliedVolSum += (result.impliedVol || 0);
+                    acc.volDiffSum += (result.volDiff || 0);
+                    acc.count++;
+                    if (result.strikes) {
+                        Object.entries(result.strikes).forEach(([sName, sData]) => {
+                            if (!acc.strikeSums[sName]) {
+                                acc.strikeSums[sName] = { strikePriceSum: 0, finalPnLSum: 0, count: 0 };
+                            }
+                            acc.strikeSums[sName].strikePriceSum += (sData.strikePrice || 0);
+                            acc.strikeSums[sName].finalPnLSum += (sData.finalPnL || 0);
+                            acc.strikeSums[sName].count++;
+                        });
+                    }
+                });
+            });
+
+            const aggregatedPnL = {};
+            Object.entries(pairAcc).forEach(([pair, acc]) => {
+                const strikes = {};
+                Object.entries(acc.strikeSums).forEach(([sName, sAcc]) => {
+                    strikes[sName] = {
+                        strikePrice: sAcc.strikePriceSum / sAcc.count,
+                        finalPnL: sAcc.finalPnLSum / sAcc.count
+                    };
+                });
+                aggregatedPnL[pair] = {
+                    avgPnL: acc.avgPnLSum / acc.count,
+                    strikes: strikes,
+                    realizedVol: acc.realizedVolSum / acc.count,
+                    impliedVol: acc.impliedVolSum / acc.count,
+                    volDiff: acc.volDiffSum / acc.count,
+                    sessionCount: acc.count
+                };
+            });
+
+            // Aggregate correlations
+            const aggregatedCorrelations = aggregateCorrelationResults(sessions);
+
+            // Aggregate correlation matrix
+            const aggregatedMatrix = aggregateCorrelationMatrix(sessions);
+
+            // Aggregate basket decomposition
+            const aggregatedBasket = aggregateBasketDecomposition(sessions);
+
+            // Gather all currencies
+            const allCurrencies = [...new Set(sessions.flatMap(s => s.dataInfo?.currencies || []))];
+
+            return {
+                pnlResults: aggregatedPnL,
+                correlationResults: aggregatedCorrelations,
+                correlationMatrix: aggregatedMatrix,
+                basketDecomposition: aggregatedBasket,
+                currencies: allCurrencies,
+                sessionCount: sessions.length
+            };
+        }
+
+        function aggregateCorrelationResults(sessions) {
+            // For each currency group, average the correlation entries across sessions
+            const groupAcc = {}; // currency -> pairKey -> { impliedSum, realizedSum, diffSum, count }
+
+            sessions.forEach(session => {
+                const corrResults = session.correlationResults;
+                if (!corrResults) return;
+                Object.entries(corrResults).forEach(([currency, group]) => {
+                    if (!group.correlations) return;
+                    if (!groupAcc[currency]) groupAcc[currency] = {};
+                    group.correlations.forEach(c => {
+                        const key = `${c.pair1}|${c.pair2}`;
+                        if (!groupAcc[currency][key]) {
+                            groupAcc[currency][key] = {
+                                pair1: c.pair1, pair2: c.pair2,
+                                pair1Original: c.pair1Original, pair2Original: c.pair2Original,
+                                crossPair: c.crossPair,
+                                impliedSum: 0, realizedSum: 0, diffSum: 0, count: 0
+                            };
+                        }
+                        const acc = groupAcc[currency][key];
+                        acc.impliedSum += c.impliedCorr;
+                        acc.realizedSum += c.realizedCorr;
+                        acc.diffSum += c.difference;
+                        acc.count++;
+                    });
+                });
+            });
+
+            const result = {};
+            Object.entries(groupAcc).forEach(([currency, pairMap]) => {
+                const correlations = Object.values(pairMap).map(acc => ({
+                    pair1: acc.pair1,
+                    pair2: acc.pair2,
+                    pair1Original: acc.pair1Original,
+                    pair2Original: acc.pair2Original,
+                    crossPair: acc.crossPair,
+                    impliedCorr: acc.impliedSum / acc.count,
+                    realizedCorr: acc.realizedSum / acc.count,
+                    difference: acc.diffSum / acc.count
+                }));
+                if (correlations.length > 0) {
+                    result[currency] = {
+                        correlations: correlations,
+                        avgImpliedCorr: correlations.reduce((s, c) => s + c.impliedCorr, 0) / correlations.length,
+                        avgRealizedCorr: correlations.reduce((s, c) => s + c.realizedCorr, 0) / correlations.length,
+                        avgDifference: correlations.reduce((s, c) => s + c.difference, 0) / correlations.length,
+                        count: correlations.length
+                    };
+                }
+            });
+            return Object.keys(result).length > 0 ? result : null;
+        }
+
+        function aggregateCorrelationMatrix(sessions) {
+            // Average viaIntermediates values across sessions for matching pair+intermediate
+            const acc = {}; // pair -> intermediate -> { impliedSum, realizedSum, diffSum, count, pair1, pair2, ... }
+
+            sessions.forEach(session => {
+                const matrix = session.correlationMatrix;
+                if (!matrix) return;
+                Object.entries(matrix).forEach(([pair, pairData]) => {
+                    if (!pairData.viaIntermediates) return;
+                    if (!acc[pair]) acc[pair] = { base: pairData.base, quote: pairData.quote, intermediates: {} };
+                    Object.entries(pairData.viaIntermediates).forEach(([intermediate, data]) => {
+                        if (!acc[pair].intermediates[intermediate]) {
+                            acc[pair].intermediates[intermediate] = {
+                                pair1: data.pair1, pair2: data.pair2,
+                                pair1Inverted: data.pair1Inverted, pair2Inverted: data.pair2Inverted,
+                                impliedSum: 0, realizedSum: 0, diffSum: 0, count: 0
+                            };
+                        }
+                        const a = acc[pair].intermediates[intermediate];
+                        a.impliedSum += data.impliedCorr;
+                        a.realizedSum += data.realizedCorr;
+                        a.diffSum += data.difference;
+                        a.count++;
+                    });
+                });
+            });
+
+            const result = {};
+            Object.entries(acc).forEach(([pair, pairAcc]) => {
+                const viaIntermediates = {};
+                Object.entries(pairAcc.intermediates).forEach(([intermediate, a]) => {
+                    viaIntermediates[intermediate] = {
+                        pair1: a.pair1, pair2: a.pair2,
+                        pair1Inverted: a.pair1Inverted, pair2Inverted: a.pair2Inverted,
+                        impliedCorr: a.impliedSum / a.count,
+                        realizedCorr: a.realizedSum / a.count,
+                        difference: a.diffSum / a.count
+                    };
+                });
+                if (Object.keys(viaIntermediates).length > 0) {
+                    result[pair] = {
+                        pair: pair,
+                        base: pairAcc.base,
+                        quote: pairAcc.quote,
+                        viaIntermediates: viaIntermediates
+                    };
+                }
+            });
+            return Object.keys(result).length > 0 ? result : null;
+        }
+
+        function aggregateBasketDecomposition(sessions) {
+            const basketSessions = sessions.filter(s => s.basketDecomposition && s.basketDecomposition.currencies);
+            if (basketSessions.length === 0) return null;
+
+            // Find common currencies across all basket sessions
+            let commonCurrencies = [...basketSessions[0].basketDecomposition.currencies];
+            basketSessions.forEach(s => {
+                commonCurrencies = commonCurrencies.filter(c => s.basketDecomposition.currencies.includes(c));
+            });
+            if (commonCurrencies.length < 2) return null;
+
+            const n = commonCurrencies.length;
+
+            // Average basketVols
+            const basketVolSums = {};
+            const basketVolCounts = {};
+            basketSessions.forEach(s => {
+                const bd = s.basketDecomposition;
+                const srcCurrencies = bd.currencies;
+                commonCurrencies.forEach(c => {
+                    const idx = srcCurrencies.indexOf(c);
+                    if (idx >= 0 && bd.basketVols && bd.basketVols[idx] != null) {
+                        basketVolSums[c] = (basketVolSums[c] || 0) + bd.basketVols[idx];
+                        basketVolCounts[c] = (basketVolCounts[c] || 0) + 1;
+                    }
+                });
+            });
+            const avgBasketVols = commonCurrencies.map(c =>
+                basketVolCounts[c] ? basketVolSums[c] / basketVolCounts[c] : 0
+            );
+
+            // Average pairDecompositions
+            const pairDecompAcc = {}; // "CCY1/CCY2" -> { sums... }
+            basketSessions.forEach(s => {
+                const bd = s.basketDecomposition;
+                if (!bd.pairDecompositions) return;
+                bd.pairDecompositions.forEach(pd => {
+                    if (!commonCurrencies.includes(pd.ccy1) || !commonCurrencies.includes(pd.ccy2)) return;
+                    const key = `${pd.ccy1}/${pd.ccy2}`;
+                    if (!pairDecompAcc[key]) {
+                        pairDecompAcc[key] = { ccy1: pd.ccy1, ccy2: pd.ccy2, pct1Sum: 0, pct2Sum: 0, pairVolSum: 0, bv1Sum: 0, bv2Sum: 0, count: 0 };
+                    }
+                    const a = pairDecompAcc[key];
+                    a.pct1Sum += (pd.pct1 || 0);
+                    a.pct2Sum += (pd.pct2 || 0);
+                    a.pairVolSum += (pd.pairVol || 0);
+                    a.bv1Sum += (pd.basketVol1 || 0);
+                    a.bv2Sum += (pd.basketVol2 || 0);
+                    a.count++;
+                });
+            });
+            const avgPairDecompositions = Object.values(pairDecompAcc).map(a => ({
+                ccy1: a.ccy1, ccy2: a.ccy2,
+                pct1: a.pct1Sum / a.count,
+                pct2: a.pct2Sum / a.count,
+                pairVol: a.pairVolSum / a.count,
+                basketVol1: a.bv1Sum / a.count,
+                basketVol2: a.bv2Sum / a.count
+            }));
+
+            // Average basketCorrelations (NxN matrix)
+            const corrAcc = {}; // "i,j" -> { sum, count }
+            basketSessions.forEach(s => {
+                const bd = s.basketDecomposition;
+                if (!bd.basketCorrelations) return;
+                const srcCurrencies = bd.currencies;
+                for (let i = 0; i < commonCurrencies.length; i++) {
+                    for (let j = 0; j < commonCurrencies.length; j++) {
+                        const srcI = srcCurrencies.indexOf(commonCurrencies[i]);
+                        const srcJ = srcCurrencies.indexOf(commonCurrencies[j]);
+                        if (srcI >= 0 && srcJ >= 0 && bd.basketCorrelations[srcI] && bd.basketCorrelations[srcI][srcJ] != null) {
+                            const key = `${i},${j}`;
+                            if (!corrAcc[key]) corrAcc[key] = { sum: 0, count: 0 };
+                            corrAcc[key].sum += bd.basketCorrelations[srcI][srcJ];
+                            corrAcc[key].count++;
+                        }
+                    }
+                }
+            });
+            const avgBasketCorrelations = Array.from({ length: n }, (_, i) =>
+                Array.from({ length: n }, (_, j) => {
+                    const key = `${i},${j}`;
+                    return corrAcc[key] ? corrAcc[key].sum / corrAcc[key].count : (i === j ? 1 : 0);
+                })
+            );
+
+            // Average covMatrix
+            const covAcc = {};
+            basketSessions.forEach(s => {
+                const bd = s.basketDecomposition;
+                if (!bd.covMatrix) return;
+                const srcCurrencies = bd.currencies;
+                for (let i = 0; i < commonCurrencies.length; i++) {
+                    for (let j = 0; j < commonCurrencies.length; j++) {
+                        const srcI = srcCurrencies.indexOf(commonCurrencies[i]);
+                        const srcJ = srcCurrencies.indexOf(commonCurrencies[j]);
+                        if (srcI >= 0 && srcJ >= 0 && bd.covMatrix[srcI] && bd.covMatrix[srcI][srcJ] != null) {
+                            const key = `${i},${j}`;
+                            if (!covAcc[key]) covAcc[key] = { sum: 0, count: 0 };
+                            covAcc[key].sum += bd.covMatrix[srcI][srcJ];
+                            covAcc[key].count++;
+                        }
+                    }
+                }
+            });
+            const avgCovMatrix = Array.from({ length: n }, (_, i) =>
+                Array.from({ length: n }, (_, j) => {
+                    const key = `${i},${j}`;
+                    return covAcc[key] ? covAcc[key].sum / covAcc[key].count : 0;
+                })
+            );
+
+            return {
+                currencies: commonCurrencies,
+                covMatrix: avgCovMatrix,
+                basketVols: avgBasketVols,
+                pairDecompositions: avgPairDecompositions,
+                basketCorrelations: avgBasketCorrelations
+            };
+        }
+
+        // ============ AGGREGATE DISPLAY ============
+
+        function computeAndDisplayAggregate() {
+            const sessions = window.loadedSessions;
+            if (!sessions || sessions.length === 0) {
+                alert('No sessions loaded. Load at least one session file first.');
+                return;
+            }
+
+            const aggregate = aggregateSessions(sessions);
+            if (!aggregate || !aggregate.pnlResults || Object.keys(aggregate.pnlResults).length === 0) {
+                alert('Could not aggregate sessions. No common pair data found.');
+                return;
+            }
+
+            const container = document.getElementById('aggregateResultsContainer');
+            if (container) {
+                container.innerHTML = generateAggregateHTML(aggregate, sessions);
+            }
+        }
+
+        function checkConfigMismatch(sessions) {
+            if (sessions.length < 2) return null;
+            const configs = sessions.map(s => s.analysisConfig || {});
+            const rebalFreqs = [...new Set(configs.map(c => c.rebalancingFrequency).filter(Boolean))];
+            const expiries = [...new Set(configs.map(c => c.optionExpiry).filter(Boolean))];
+            const mismatches = [];
+            if (rebalFreqs.length > 1) mismatches.push(`Rebalancing frequency: ${rebalFreqs.join(' vs ')}`);
+            if (expiries.length > 1) mismatches.push(`Option expiry: ${expiries.join(' vs ')}`);
+            return mismatches.length > 0 ? mismatches : null;
+        }
+
+        function generateAggregateHTML(aggregate, sessions) {
+            let html = '';
+
+            // Config mismatch warning
+            const mismatches = checkConfigMismatch(sessions);
+            if (mismatches) {
+                html += `
+                    <div class="config-mismatch-banner">
+                        <strong>Warning: Config mismatch across sessions</strong><br>
+                        ${mismatches.join('<br>')}
+                        <br><span style="font-size: 11px;">Results are averaged across sessions with different settings.</span>
+                    </div>
+                `;
+            }
+
+            // Header card
+            const pairCount = Object.keys(aggregate.pnlResults).length;
+            const dateRange = getAggregateDateRange(sessions);
+            html += `
+                <div class="aggregate-header-card">
+                    <h3>Aggregate Results</h3>
+                    <div class="aggregate-meta">
+                        <span>Sessions: <strong>${aggregate.sessionCount}</strong></span>
+                        <span>Pairs: <strong>${pairCount}</strong></span>
+                        <span>Date range: <strong>${dateRange}</strong></span>
+                        <span>Method: <strong>Average</strong></span>
+                    </div>
+                </div>
+            `;
+
+            // P&L section - reuse existing generators
+            const pairResults = Object.entries(aggregate.pnlResults)
+                .sort((a, b) => b[1].avgPnL - a[1].avgPnL);
+
+            if (pairResults.length > 0) {
+                const scales = calculateTabScales(pairResults);
+
+                // Top/bottom ranking
+                html += '<h3 style="margin: 20px 0 10px 0; font-size: 15px;">P&L Rankings (Averaged)</h3>';
+                const top5 = pairResults.slice(0, 5);
+                const bottom5 = pairResults.slice(-5).reverse();
+                html += '<div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px;">';
+                html += '<div style="flex: 1; min-width: 400px;"><h4 style="color: var(--green); margin: 0 0 8px 0;">Top 5</h4>';
+                html += generateRankingTable(top5, 1, scales);
+                html += '</div>';
+                html += '<div style="flex: 1; min-width: 400px;"><h4 style="color: var(--red); margin: 0 0 8px 0;">Bottom 5</h4>';
+                html += generateRankingTable(bottom5, pairResults.length - 4, scales);
+                html += '</div>';
+                html += '</div>';
+
+                // Currency group tables
+                const currencies = aggregate.currencies || [];
+                if (currencies.length > 0) {
+                    const blocks = buildCurrencyBlocksFromResults(
+                        pairResults.map(([p]) => p),
+                        currencies
+                    );
+                    html += '<h3 style="margin: 20px 0 10px 0; font-size: 15px;">P&L by Currency Group (Averaged)</h3>';
+                    Object.entries(blocks).forEach(([currency, pairs]) => {
+                        const blockPairs = pairs.map(p => {
+                            const found = pairResults.find(([name]) => name === p);
+                            return found || null;
+                        }).filter(Boolean);
+                        if (blockPairs.length > 0) {
+                            html += `<h4 style="margin: 16px 0 6px 0;">${currency} Block (${blockPairs.length} pairs)</h4>`;
+                            html += generateCurrencyGroupTable(blockPairs, scales);
+                        }
+                    });
+                }
+            }
+
+            // Correlation 1 section
+            if (aggregate.correlationResults) {
+                html += '<h3 style="margin: 24px 0 10px 0; font-size: 15px;">Correlation Analysis (Averaged)</h3>';
+                html += generateCorrelationResults(aggregate.correlationResults);
+            }
+
+            // Correlation 2 (matrix) section
+            if (aggregate.correlationMatrix) {
+                html += '<h3 style="margin: 24px 0 10px 0; font-size: 15px;">Correlation Matrix (Averaged)</h3>';
+                html += generateCorrelationMatrixDisplay(aggregate.correlationMatrix, aggregate.currencies);
+            }
+
+            // Basket decomposition section
+            if (aggregate.basketDecomposition) {
+                html += '<h3 style="margin: 24px 0 10px 0; font-size: 15px;">Basket Decomposition (Averaged)</h3>';
+                // Temporarily swap global for the generator
+                const prevBasket = window.basketDecompositionResults;
+                const prevCurrencies = window.detectedBasketCurrencies;
+                window.basketDecompositionResults = aggregate.basketDecomposition;
+                window.detectedBasketCurrencies = aggregate.basketDecomposition.currencies;
+                html += generateBasketResultsHTML();
+                window.basketDecompositionResults = prevBasket;
+                window.detectedBasketCurrencies = prevCurrencies;
+            }
+
+            return html;
+        }
+
+        function getAggregateDateRange(sessions) {
+            let earliest = null, latest = null;
+            sessions.forEach(s => {
+                const aw = s.dataInfo?.analysisWindow;
+                if (aw) {
+                    const start = new Date(aw.start);
+                    const end = new Date(aw.end);
+                    if (!earliest || start < earliest) earliest = start;
+                    if (!latest || end > latest) latest = end;
+                }
+            });
+            if (!earliest || !latest) return 'N/A';
+            return `${earliest.toLocaleDateString()} - ${latest.toLocaleDateString()}`;
+        }
+
         function displayResultsWithTabs(pnlResults, correlationResults) {
             // Store results globally for export functions
             window.batchAnalysisResults = pnlResults;
@@ -5981,6 +6797,9 @@ Full report in email.
                         <button class="batch-tab" data-tab="basket" onclick="switchBatchTab('basket')">
                             🧺 Basket Decomposition
                         </button>
+                        <button class="batch-tab" data-tab="sessions" onclick="switchBatchTab('sessions')">
+                            📁 Sessions
+                        </button>
                     </div>
                 </div>
 
@@ -6044,6 +6863,10 @@ Full report in email.
 
                 <div id="tab-basket" class="batch-tab-panel">
                     ${basketHTML}
+                </div>
+
+                <div id="tab-sessions" class="batch-tab-panel">
+                    ${generateSessionsTab()}
                 </div>
             `;
 
@@ -7230,6 +8053,9 @@ Full report in email.
                     </button>
                     <button class="btn btn-secondary" onclick="copyBloombergChat()">
                         💬 Copy Bloomberg Chat
+                    </button>
+                    <button class="btn btn-secondary" onclick="saveSessionToJSON()">
+                        💾 Save Session
                     </button>
                     <div id="exportStatusOverview" style="margin-left: 12px; font-size: 13px; color: var(--green);"></div>
                 </div>
