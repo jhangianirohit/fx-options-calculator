@@ -1995,10 +1995,10 @@ th {
                 <div id="batchResultsContent">
                 <!-- Top 5 / Bottom 5 Rankings -->
                 <div id="rankingsSection">
-                    <h3 class="currency-header" style="text-align: center; margin-top: 20px;">🏆 TOP 5 PERFORMERS</h3>
+                    <h3 class="currency-header" style="text-align: center; margin-top: 20px;">🏆 TOP 10 PERFORMERS</h3>
                     <div id="top5Table"></div>
 
-                    <h3 class="currency-header" style="text-align: center; margin-top: 20px; border-left: 3px solid var(--red);">📉 BOTTOM 5 PERFORMERS</h3>
+                    <h3 class="currency-header" style="text-align: center; margin-top: 20px; border-left: 3px solid var(--red);">📉 BOTTOM 10 PERFORMERS</h3>
                     <div id="bottom5Table"></div>
                 </div>
 
@@ -4894,12 +4894,12 @@ th {
                     avgPnL: data.avgPnL
                 }))
                 .sort((a, b) => b.avgPnL - a.avgPnL)
-                .slice(0, 5);
+                .slice(0, 10);
 
             let html = `
 <div style="margin-bottom: 32px;">
     <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
-        TOP 5 VOL PERFORMERS (Realized > Implied)
+        TOP 10 VOL PERFORMERS (Realized > Implied)
     </h3>
     <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
         <thead>
@@ -4962,14 +4962,14 @@ th {
                     avgPnL: data.avgPnL
                 }))
                 .sort((a, b) => a.avgPnL - b.avgPnL)
-                .slice(0, 5);
+                .slice(0, 10);
 
             const totalPairs = Object.keys(pnlResults).filter(p => !pnlResults[p].error).length;
 
             let html = `
 <div style="margin-bottom: 32px;">
     <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
-        BOTTOM 5 VOL PERFORMERS (Realized < Implied)
+        BOTTOM 10 VOL PERFORMERS (Realized < Implied)
     </h3>
     <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
         <thead>
@@ -5037,12 +5037,12 @@ th {
 
             const sorted = allCorrelations
                 .sort((a, b) => b.difference - a.difference)
-                .slice(0, 5);
+                .slice(0, 10);
 
             let html = `
 <div style="margin-bottom: 32px;">
     <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
-        TOP 5 CORRELATION PERFORMERS
+        TOP 10 CORRELATION PERFORMERS
     </h3>
     <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
         <thead>
@@ -5108,14 +5108,14 @@ th {
 
             const sorted = allCorrelations
                 .sort((a, b) => a.difference - b.difference)
-                .slice(0, 5);
+                .slice(0, 10);
 
             const totalCorrs = allCorrelations.length;
 
             let html = `
 <div style="margin-bottom: 32px;">
     <h3 style="font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb;">
-        BOTTOM 5 CORRELATION PERFORMERS
+        BOTTOM 10 CORRELATION PERFORMERS
     </h3>
     <table style="width: 100%; border-collapse: collapse; font-family: 'SF Mono', Monaco, monospace; font-size: 13px;">
         <thead>
@@ -5826,7 +5826,7 @@ ${/* Correlation matrix section removed from email - only available on webpage *
                     avgPnL: data.avgPnL
                 }))
                 .sort((a, b) => b.volDiff - a.volDiff)
-                .slice(0, 5);
+                .slice(0, 10);
         }
 
         function getBottom5Vol(pnlResults) {
@@ -5840,7 +5840,7 @@ ${/* Correlation matrix section removed from email - only available on webpage *
                     avgPnL: data.avgPnL
                 }))
                 .sort((a, b) => a.volDiff - b.volDiff)
-                .slice(0, 5);
+                .slice(0, 10);
         }
 
         function getTop5Correlations(correlationResults) {
@@ -5862,7 +5862,7 @@ ${/* Correlation matrix section removed from email - only available on webpage *
 
             return allCorrelations
                 .sort((a, b) => b.diff - a.diff)
-                .slice(0, 5);
+                .slice(0, 10);
         }
 
         function getBottom5Correlations(correlationResults) {
@@ -5885,7 +5885,7 @@ ${/* Correlation matrix section removed from email - only available on webpage *
             // Sort ascending (most negative first)
             return allCorrelations
                 .sort((a, b) => a.diff - b.diff)
-                .slice(0, 5);
+                .slice(0, 10);
         }
 
         function generateBloombergChat() {
@@ -5915,19 +5915,19 @@ ${formatShortDateTime(startTime)} to ${formatShortDateTime(endTime)} EST (${dura
 Rebal: ${rebalFreq} | Expiry: ${expiryText} | $100M per strike
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TOP 5 VOL (Real > Impl):
-${top5Vol.map((item, i) => 
+TOP 10 VOL (Real > Impl):
+${top5Vol.map((item, i) =>
     `${i+1}. ${item.pair.padEnd(8)} ${(item.volDiff >= 0 ? '+' : '')}${(item.volDiff*100).toFixed(2)}%  (${(item.implVol*100).toFixed(2)}% → ${(item.realVol*100).toFixed(2)}%)  ${formatPnLRounded(item.avgPnL)}`
 ).join('\n')}
 
-BOTTOM 5 VOL (Real < Impl):
+BOTTOM 10 VOL (Real < Impl):
 ${bottom5Vol.map((item, i) => {
     const totalPairs = Object.keys(window.batchAnalysisResults || {}).filter(p => !window.batchAnalysisResults[p].error).length;
-    const rank = totalPairs - 4 + i;
+    const rank = totalPairs - 9 + i;
     return `${rank}. ${item.pair.padEnd(8)} ${(item.volDiff >= 0 ? '+' : '')}${(item.volDiff*100).toFixed(2)}%  (${(item.implVol*100).toFixed(2)}% → ${(item.realVol*100).toFixed(2)}%)  ${formatPnLRounded(item.avgPnL)}`;
 }).join('\n')}
 
-${top5Corr.length > 0 ? `TOP 5 CORR:
+${top5Corr.length > 0 ? `TOP 10 CORR:
 ${top5Corr.map((item, i) => 
     `${i+1}. ${item.currency}: ${item.pair1}-${item.pair2} ${(item.diff >= 0 ? '+' : '')}${Math.round(item.diff*100)}% (${Math.round(item.impl*100)}%→${Math.round(item.real*100)}%)`
 ).join('\n')}
@@ -6634,14 +6634,14 @@ Full report in email.
 
                 // Top/bottom ranking
                 html += '<h3 style="margin: 20px 0 10px 0; font-size: 15px;">P&L Rankings (Averaged)</h3>';
-                const top5 = pairResults.slice(0, 5);
-                const bottom5 = pairResults.slice(-5).reverse();
+                const top5 = pairResults.slice(0, 10);
+                const bottom5 = pairResults.slice(-10).reverse();
                 html += '<div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px;">';
-                html += '<div style="flex: 1; min-width: 400px;"><h4 style="color: var(--green); margin: 0 0 8px 0;">Top 5</h4>';
+                html += '<div style="flex: 1; min-width: 400px;"><h4 style="color: var(--green); margin: 0 0 8px 0;">Top 10</h4>';
                 html += generateRankingTable(top5, 1, scales);
                 html += '</div>';
-                html += '<div style="flex: 1; min-width: 400px;"><h4 style="color: var(--red); margin: 0 0 8px 0;">Bottom 5</h4>';
-                html += generateRankingTable(bottom5, pairResults.length - 4, scales);
+                html += '<div style="flex: 1; min-width: 400px;"><h4 style="color: var(--red); margin: 0 0 8px 0;">Bottom 10</h4>';
+                html += generateRankingTable(bottom5, Math.max(1, pairResults.length - bottom5.length + 1), scales);
                 html += '</div>';
                 html += '</div>';
 
@@ -7988,26 +7988,26 @@ Full report in email.
                 </div>
             `;
             
-            // Top 5 Vol Performers
-            const top5Vol = pairResults.slice(0, 5);
+            // Top 10 Vol Performers
+            const top5Vol = pairResults.slice(0, 10);
             html += `
                 <div class="summary-section">
-                    <h3>🏆 Top 5 P&L Performers</h3>
+                    <h3>🏆 Top 10 P&L Performers</h3>
                     ${generateRankingTable(top5Vol, 1, scales)}
                 </div>
             `;
 
-            // Bottom 5 Vol Performers
-            const bottom5Vol = pairResults.slice(-5).reverse();
+            // Bottom 10 Vol Performers
+            const bottom5Vol = pairResults.slice(-10).reverse();
             const bottom5StartRank = Math.max(1, pairResults.length - bottom5Vol.length + 1);
             html += `
                 <div class="summary-section">
-                    <h3>📉 Bottom 5 P&L Performers</h3>
+                    <h3>📉 Bottom 10 P&L Performers</h3>
                     ${generateRankingTable(bottom5Vol, bottom5StartRank, scales)}
                 </div>
             `;
-            
-            // Top 5 Correlations (if available)
+
+            // Top 10 Correlations (if available)
             if (correlationResults && Object.keys(correlationResults).length > 0) {
                 const allCorrelations = [];
                 Object.entries(correlationResults).forEach(([currency, data]) => {
@@ -8023,23 +8023,23 @@ Full report in email.
                 });
                 
                 const sortedCorr = allCorrelations.sort((a, b) => b.diff - a.diff);
-                const top5Corr = sortedCorr.slice(0, 5);
-                const bottom5Corr = sortedCorr.slice(-5).reverse();
-                
+                const top5Corr = sortedCorr.slice(0, 10);
+                const bottom5Corr = sortedCorr.slice(-10).reverse();
+
                 if (top5Corr.length > 0) {
                     html += `
                         <div class="summary-section">
-                            <h3>🔗 Top 5 Correlation Performers</h3>
+                            <h3>🔗 Top 10 Correlation Performers</h3>
                             ${generateCorrRankingTable(top5Corr, 1)}
                         </div>
                     `;
                 }
-                
+
                 if (bottom5Corr.length > 0) {
                     html += `
                         <div class="summary-section">
-                            <h3>📊 Bottom 5 Correlation Performers</h3>
-                            ${generateCorrRankingTable(bottom5Corr, sortedCorr.length - 4)}
+                            <h3>📊 Bottom 10 Correlation Performers</h3>
+                            ${generateCorrRankingTable(bottom5Corr, sortedCorr.length - 9)}
                         </div>
                     `;
                 }
@@ -8941,19 +8941,19 @@ Full report in email.
             // Calculate scales once for consistent coloring across all tables in this view
             const scales = calculateTabScales(pairResults);
 
-            // Top 5 / Bottom 5 Rankings
-            const top5 = pairResults.slice(0, 5);
-            const bottom5 = pairResults.slice(-5).reverse();
+            // Top 10 / Bottom 10 Rankings
+            const top5 = pairResults.slice(0, 10);
+            const bottom5 = pairResults.slice(-10).reverse();
             const bottom5StartRank = Math.max(1, pairResults.length - bottom5.length + 1);
 
             html += `
             <div class="card">
-                <h3 class="currency-header" style="text-align: center;">🏆 TOP 5 PERFORMERS</h3>
+                <h3 class="currency-header" style="text-align: center;">🏆 TOP 10 PERFORMERS</h3>
                 ${generateRankingTable(top5, 1, scales)}
             </div>
 
             <div class="card">
-                <h3 class="currency-header" style="text-align: center; border-left: 3px solid var(--red);">📉 BOTTOM 5 PERFORMERS</h3>
+                <h3 class="currency-header" style="text-align: center; border-left: 3px solid var(--red);">📉 BOTTOM 10 PERFORMERS</h3>
                 ${generateRankingTable(bottom5, bottom5StartRank, scales)}
             </div>`;
 
@@ -9155,13 +9155,13 @@ Full report in email.
             // Sort by difference (descending)
             allCorrelations.sort((a, b) => b.difference - a.difference);
 
-            const top5 = allCorrelations.slice(0, 5);
-            const bottom5 = allCorrelations.slice(-5).reverse();
+            const top5 = allCorrelations.slice(0, 10);
+            const bottom5 = allCorrelations.slice(-10).reverse();
 
             let html = `
             <div class="card">
                 <div class="section-header">
-                    <h2>🏆 TOP 5 CORRELATION PERFORMERS (Largest Positive Difference)</h2>
+                    <h2>🏆 TOP 10 CORRELATION PERFORMERS (Largest Positive Difference)</h2>
                 </div>
                 <table class="data-table">
                     <thead>
@@ -9199,7 +9199,7 @@ Full report in email.
 
             <div class="card">
                 <div class="section-header">
-                    <h2>📉 BOTTOM 5 CORRELATION PERFORMERS (Smallest/Most Negative Difference)</h2>
+                    <h2>📉 BOTTOM 10 CORRELATION PERFORMERS (Smallest/Most Negative Difference)</h2>
                 </div>
                 <table class="data-table">
                     <thead>
@@ -9215,7 +9215,7 @@ Full report in email.
                     </thead>
                     <tbody>`;
 
-            const startRank = Math.max(1, allCorrelations.length - 4); // Rank from bottom
+            const startRank = Math.max(1, allCorrelations.length - 9); // Rank from bottom
 
             bottom5.forEach((corr, idx) => {
                 html += `
@@ -9307,12 +9307,10 @@ Full report in email.
         }
 
         function displayRankings(pairResults) {
-            const top5 = pairResults.slice(0, 5);
-            const bottom5 = pairResults.slice(-5).reverse();
+            const top5 = pairResults.slice(0, 10);
+            const bottom5 = pairResults.slice(-10).reverse();
 
-            // Calculate correct start rank for bottom 5
-            // If there are 33 pairs, bottom 5 should start at rank 29 (33 - 5 + 1)
-            // If there are 3 pairs, bottom 5 should start at rank 1 (not -1)
+            // Calculate correct start rank for bottom 10
             const bottom5StartRank = Math.max(1, pairResults.length - bottom5.length + 1);
 
             // Calculate scales once using ALL pairs for consistent coloring across both tables
