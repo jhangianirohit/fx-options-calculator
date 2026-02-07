@@ -3038,20 +3038,20 @@ th {
                 <table class="data-table" style="min-width: 800px; font-size: 11px;">
                     <thead>
                         <tr>
-                            <th style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 10; padding: 8px 10px; text-align: left; border-right: 2px solid var(--border);">Pair</th>`;
-            
+                            <th style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 10; padding: 4px 6px; text-align: left; border-right: 2px solid var(--border);">Pair</th>`;
+
             // Header row with intermediate currencies
             intermediates.forEach(intermediate => {
                 html += `
-                            <th style="padding: 8px 10px; text-align: center; min-width: 160px; background: var(--bg-elevated);">
+                            <th style="padding: 4px 4px; text-align: center; min-width: 110px; background: var(--bg-elevated);">
                                 <div style="font-weight: 600; margin-bottom: 2px;">Via ${intermediate}</div>
                                 <div style="font-size: 9px; color: var(--text-muted); font-weight: normal;">Impl | Real | Diff</div>
                             </th>`;
             });
-            
+
             // Add average column header
             html += `
-                            <th style="padding: 8px 10px; text-align: center; min-width: 160px; background: var(--bg-elevated); border-left: 2px solid var(--border);">
+                            <th style="padding: 4px 4px; text-align: center; min-width: 110px; background: var(--bg-elevated); border-left: 2px solid var(--border);">
                                 <div style="font-weight: 600; margin-bottom: 2px;">AVERAGE</div>
                                 <div style="font-size: 9px; color: var(--text-muted); font-weight: normal;">Impl | Real | Diff</div>
                             </th>`;
@@ -3076,8 +3076,8 @@ th {
                 // Regular data row
                 html += `
                         <tr>
-                            <td style="position: sticky; left: 0; background: var(--bg-main); z-index: 9; padding: 6px 10px; font-weight: 600; border-right: 2px solid var(--border); font-size: 11px;">${pair}</td>`;
-                
+                            <td style="position: sticky; left: 0; background: var(--bg-main); z-index: 9; padding: 3px 6px; font-weight: 600; border-right: 2px solid var(--border); font-size: 11px; white-space: nowrap;">${pair}</td>`;
+
                 intermediates.forEach(intermediate => {
                     const data = correlationMatrix[pair]?.viaIntermediates?.[intermediate];
                     
@@ -3091,22 +3091,22 @@ th {
                         const diffTextColor = getTextColorForBackground(diffBgColor);
                         
                         html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px;">
-                                <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 500; font-size: 10px;">
+                            <td style="padding: 3px 3px; text-align: center;">
+                                <div style="display: flex; gap: 3px; justify-content: center; align-items: center;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 500; font-size: 10px;">
                                         ${formatCorrInteger(data.impliedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 500; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 500; font-size: 10px;">
                                         ${formatCorrInteger(data.realizedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 600; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 600; font-size: 10px;">
                                         ${data.difference >= 0 ? '+' : ''}${formatCorrInteger(data.difference)}
                                     </span>
                                 </div>
                             </td>`;
                     } else {
                         html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; color: var(--text-muted);">—</td>`;
+                            <td style="padding: 3px 3px; text-align: center; color: var(--text-muted);">—</td>`;
                     }
                 });
                 
@@ -3122,22 +3122,22 @@ th {
                     const diffTextColor = getTextColorForBackground(diffBgColor);
                     
                     html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; border-left: 2px solid var(--border-strong);">
-                                <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 700; font-size: 10px;">
+                            <td style="padding: 3px 3px; text-align: center; border-left: 2px solid var(--border-strong);">
+                                <div style="display: flex; gap: 3px; justify-content: center; align-items: center;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 700; font-size: 10px;">
                                         ${formatCorrInteger(rowAvg.impliedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 700; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 700; font-size: 10px;">
                                         ${formatCorrInteger(rowAvg.realizedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 700; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 700; font-size: 10px;">
                                         ${rowAvg.difference >= 0 ? '+' : ''}${formatCorrInteger(rowAvg.difference)}
                                     </span>
                                 </div>
                             </td>`;
                 } else {
                     html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; color: var(--text-muted); border-left: 2px solid var(--border-strong);">—</td>`;
+                            <td style="padding: 3px 3px; text-align: center; color: var(--text-muted); border-left: 2px solid var(--border-strong);">—</td>`;
                 }
                 
                 html += `
@@ -3149,7 +3149,7 @@ th {
                     </tbody>
                     <tfoot>
                         <tr style="border-top: 2px solid var(--cyan); background: var(--bg-elevated);">
-                            <td style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 9; padding: 12px; font-weight: 700; color: var(--cyan); border-right: 2px solid var(--border);">AVERAGE</td>`;
+                            <td style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 9; padding: 6px 8px; font-weight: 700; color: var(--cyan); border-right: 2px solid var(--border);">AVERAGE</td>`;
             
             intermediates.forEach(intermediate => {
                 const avg = intermediateAverages[intermediate];
@@ -3163,22 +3163,22 @@ th {
                     const diffTextColor = getTextColorForBackground(diffBgColor);
                     
                     html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px;">
-                                <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 700; font-size: 10px;">
+                            <td style="padding: 3px 3px; text-align: center;">
+                                <div style="display: flex; gap: 3px; justify-content: center; align-items: center;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 700; font-size: 10px;">
                                         ${formatCorrInteger(avg.impliedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 700; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 700; font-size: 10px;">
                                         ${formatCorrInteger(avg.realizedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 700; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 700; font-size: 10px;">
                                         ${avg.difference >= 0 ? '+' : ''}${formatCorrInteger(avg.difference)}
                                     </span>
                                 </div>
                             </td>`;
                 } else {
                     html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; color: var(--text-muted);">—</td>`;
+                            <td style="padding: 3px 3px; text-align: center; color: var(--text-muted);">—</td>`;
                 }
             });
             
@@ -3207,22 +3207,22 @@ th {
                 const diffTextColor = getTextColorForBackground(diffBgColor);
                 
                 html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; border-left: 2px solid var(--border-strong);">
-                                <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 700; font-size: 10px;">
+                            <td style="padding: 3px 3px; text-align: center; border-left: 2px solid var(--border-strong);">
+                                <div style="display: flex; gap: 3px; justify-content: center; align-items: center;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${implBgColor}; color: ${implTextColor}; font-weight: 700; font-size: 10px;">
                                         ${formatCorrInteger(grandAvg.impliedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 700; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${realBgColor}; color: ${realTextColor}; font-weight: 700; font-size: 10px;">
                                         ${formatCorrInteger(grandAvg.realizedCorr)}
                                     </span>
-                                    <span style="padding: 3px 6px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 700; font-size: 10px;">
+                                    <span style="padding: 2px 4px; border-radius: 3px; background-color: ${diffBgColor}; color: ${diffTextColor}; font-weight: 700; font-size: 10px;">
                                         ${grandAvg.difference >= 0 ? '+' : ''}${formatCorrInteger(grandAvg.difference)}
                                     </span>
                                 </div>
                             </td>`;
             } else {
                 html += `
-                            <td style="padding: 6px 8px; text-align: center; width: 100px; color: var(--text-muted); border-left: 2px solid var(--border-strong);">—</td>`;
+                            <td style="padding: 3px 3px; text-align: center; color: var(--text-muted); border-left: 2px solid var(--border-strong);">—</td>`;
             }
             
             html += `
@@ -8499,7 +8499,7 @@ Full report in email.
         function generateRankingTable(pairs, startRank, scales) {
             // scales: { strikePnLMaxAbs, avgPnLMaxAbs } - pre-calculated at tab level for consistent coloring
 
-            let html = '<div class="card" style="overflow-x: auto;"><table class="data-table" style="min-width: 900px; font-size: 11px;"><thead><tr>';
+            let html = '<div class="card" style="overflow-x: auto;"><table class="data-table" style="min-width: 900px; font-size: 13px;"><thead><tr>';
             html += '<th class="sortable-header" onclick="sortTable(this, 0, \'number\')">Rank</th>';
             html += '<th class="sortable-header" onclick="sortTable(this, 1, \'string\')">Pair</th>';
             html += '<th class="sortable-header numeric-header" onclick="sortTable(this, 2, \'number\')">Avg P&L</th>';
@@ -8531,7 +8531,7 @@ Full report in email.
                 html += `<td>${rank}</td>`;
                 html += `<td style="font-weight: bold;">${pair}</td>`;
                 html += `<td style="text-align: center; width: 110px;">
-                    <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: 700; font-size: 10px; cursor: pointer;"
+                    <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 4px 8px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: 700; font-size: 12px; cursor: pointer;"
                           data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</span>
                 </td>`;
 
@@ -8541,7 +8541,7 @@ Full report in email.
                     const color = getPnLColor(pnl, scales?.strikePnLMaxAbs);
                     const strikeType = strikeTypeMap[strikeName];
                     html += `<td style="text-align: center; width: 110px;">
-                        <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${color.bg}; color: ${color.text}; font-weight: 500; font-size: 10px; cursor: pointer;"
+                        <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 4px 8px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${color.bg}; color: ${color.text}; font-weight: 500; font-size: 12px; cursor: pointer;"
                               data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</span>
                     </td>`;
                 });
@@ -8758,18 +8758,18 @@ Full report in email.
             
             let html = `
             <div class="card" style="overflow-x: auto;">
-                <table class="data-table" style="min-width: 800px; font-size: 11px;">
+                <table class="data-table" style="min-width: 800px; font-size: 13px;">
                     <thead>
                         <tr>
                             <th class="sortable-header" onclick="sortTable(this, 0, 'string')" style="position: sticky; left: 0; background: var(--bg-elevated); z-index: 10; padding: 8px 10px; text-align: left; border-right: 2px solid var(--border);">Pair</th>
                             <th class="sortable-header numeric-header" onclick="sortTable(this, 1, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Avg P&L</th>`;
-            
+
             // Strike headers
             ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
                 const idxMap = { '10Δ Put': 2, '25Δ Put': 3, 'ATM Call': 4, '25Δ Call': 5, '10Δ Call': 6 };
                 html += `<th class="sortable-header numeric-header" onclick="sortTable(this, ${idxMap[strikeName]}, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">${strikeName}</th>`;
             });
-            
+
             html += `
                             <th class="sortable-header numeric-header" onclick="sortTable(this, 7, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated); border-left: 2px solid var(--border-strong);">Impl Vol</th>
                             <th class="sortable-header numeric-header" onclick="sortTable(this, 8, 'number')" style="padding: 8px 10px; text-align: center; min-width: 100px; background: var(--bg-elevated);">Real Vol</th>
@@ -8783,9 +8783,9 @@ Full report in email.
 
                 html += `
                         <tr>
-                            <td style="position: sticky; left: 0; background: var(--bg-main); z-index: 9; padding: 6px 10px; font-weight: 600; border-right: 2px solid var(--border); font-size: 11px;">${pair}</td>
+                            <td style="position: sticky; left: 0; background: var(--bg-main); z-index: 9; padding: 6px 10px; font-weight: 600; border-right: 2px solid var(--border); font-size: 13px;">${pair}</td>
                             <td style="padding: 6px 8px; text-align: center; width: 100px;">
-                                <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: 600; font-size: 10px; cursor: pointer; font-family: 'SF Mono', Monaco, monospace; text-align: center;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</span>
+                                <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 4px 8px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${avgColor.bg}; color: ${avgColor.text}; font-weight: 600; font-size: 12px; cursor: pointer;" data-pair="${pair}" data-strike="avgPnL" title="Click to view chart">${formatThousand(result.avgPnL)}</span>
                             </td>`;
 
                 ['10Δ Put', '25Δ Put', 'ATM Call', '25Δ Call', '10Δ Call'].forEach(strikeName => {
@@ -8794,7 +8794,7 @@ Full report in email.
                     const strikeType = strikeTypeMap[strikeName];
                     html += `
                             <td style="padding: 6px 8px; text-align: center; width: 100px;">
-                                <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${color.bg}; color: ${color.text}; font-weight: 500; font-size: 10px; cursor: pointer;" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</span>
+                                <span class="chart-cell" style="display: inline-block; min-width: 70px; padding: 4px 8px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${color.bg}; color: ${color.text}; font-weight: 500; font-size: 12px; cursor: pointer;" data-pair="${pair}" data-strike="${strikeType}" title="Click to view chart">${formatThousand(pnl)}</span>
                             </td>`;
                 });
                 
@@ -8808,13 +8808,13 @@ Full report in email.
                 
                 html += `
                             <td style="padding: 6px 8px; text-align: center; width: 100px; border-left: 2px solid var(--border-strong);">
-                                <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${implVolColor}; color: ${implVolText}; font-weight: 500; font-size: 10px;">${(result.impliedVol * 100).toFixed(2)}%</span>
+                                <span style="display: inline-block; min-width: 70px; padding: 4px 8px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${implVolColor}; color: ${implVolText}; font-weight: 500; font-size: 12px;">${(result.impliedVol * 100).toFixed(2)}%</span>
                             </td>
                             <td style="padding: 6px 8px; text-align: center; width: 100px;">
-                                <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${realVolColor}; color: ${realVolText}; font-weight: 500; font-size: 10px;">${(result.realizedVol * 100).toFixed(2)}%</span>
+                                <span style="display: inline-block; min-width: 70px; padding: 4px 8px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${realVolColor}; color: ${realVolText}; font-weight: 500; font-size: 12px;">${(result.realizedVol * 100).toFixed(2)}%</span>
                             </td>
                             <td style="padding: 6px 8px; text-align: center; width: 100px; ">
-                                <span style="display: inline-block; min-width: 70px; padding: 3px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${volDiffColor}; color: ${volDiffText}; font-weight: 600; font-size: 10px;">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</span>
+                                <span style="display: inline-block; min-width: 70px; padding: 4px 8px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; text-align: center; background-color: ${volDiffColor}; color: ${volDiffText}; font-weight: 600; font-size: 12px;">${result.volDiff >= 0 ? '+' : ''}${(result.volDiff * 100).toFixed(2)}%</span>
                             </td>
                         </tr>`;
             });
