@@ -1648,6 +1648,55 @@ th {
     align-items: center;
     gap: 4px;
 }
+.signal-cheap {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.signal-rich {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.fair-value-info {
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+.fair-value-info strong {
+    color: var(--text-primary);
+}
+.fair-value-summary {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+}
+.fair-value-summary span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
 
     </style>
 </head>
@@ -4233,6 +4282,9 @@ th {
 
                     console.log(`Realized vols available:`, Object.keys(realizedVols));
 
+                    // Store globally for fair value computation
+                    window.realizedVols = realizedVols;
+
                     // Calculate correlations
                     correlationResults = calculateAllCorrelations(
                         analyzedPairs, // analyzed pairs (deduplicated)
@@ -6709,6 +6761,377 @@ Full report in email.
             return `${earliest.toLocaleDateString()} - ${latest.toLocaleDateString()}`;
         }
 
+        // ============ FAIR VALUE VOLS ============
+
+        function generateFairValueTab() {
+            return `
+                <div class="fair-value-info">
+                    <strong>Fair Value Vols — Correlation-Implied Optimization</strong><br>
+                    Finds the set of vols that best reconciles all triangle correlation identities.
+                    For each triangle (pair1, pair2, cross), the implied correlation is computed from vols via
+                    ρ = (σ₁² + σ₂² − σ_cross²) / (2·σ₁·σ₂). The optimizer adjusts vols to minimize the gap
+                    between these fair correlations and the market-implied correlations, with regularization
+                    to keep fair vols near realized.<br><br>
+                    <strong>Signal:</strong> Fair Vol − Implied Vol → Positive = CHEAP (buy vol), Negative = RICH (sell vol).
+                </div>
+                <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="computeFairValueVols()" id="fairValueComputeBtn">
+                        Compute Fair Value Vols
+                    </button>
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                        <label for="lambdaSlider" style="color: var(--text-muted); white-space: nowrap;">λ Regularization:</label>
+                        <input type="range" id="lambdaSlider" min="-4" max="1" step="0.1" value="-2"
+                            oninput="document.getElementById('lambdaValue').textContent = Math.pow(10, this.value).toFixed(4)"
+                            style="width: 140px;" />
+                        <span id="lambdaValue" style="font-family: monospace; min-width: 50px;">0.0100</span>
+                        <span style="color: var(--text-muted); font-size: 11px;">(low → near implied, high → near realized)</span>
+                    </div>
+                    <span id="fairValueStatus" style="font-size: 13px; color: var(--text-muted);"></span>
+                </div>
+                <div id="fairValueResults"></div>
+            `;
+        }
+
+        function computeFairValueVols() {
+            const statusEl = document.getElementById('fairValueStatus');
+            const resultsEl = document.getElementById('fairValueResults');
+
+            // Validate prerequisites
+            if (!window.correlationMatrix || Object.keys(window.correlationMatrix).length === 0) {
+                resultsEl.innerHTML = '<div class="info-box" style="color: var(--red);">Correlation matrix not available. Run batch analysis with Correlation 2 enabled.</div>';
+                return;
+            }
+            if (!window.realizedVols || Object.keys(window.realizedVols).length === 0) {
+                resultsEl.innerHTML = '<div class="info-box" style="color: var(--red);">Realized vols not available. Run batch analysis first.</div>';
+                return;
+            }
+            if (!batchData || !batchData.impliedVols) {
+                resultsEl.innerHTML = '<div class="info-box" style="color: var(--red);">Implied vols not available. Run batch analysis first.</div>';
+                return;
+            }
+
+            statusEl.textContent = 'Extracting triangles...';
+
+            // Extract triangles from correlation matrix
+            const triangles = extractTrianglesFromMatrix(window.correlationMatrix, batchData.impliedVols);
+
+            if (triangles.length === 0) {
+                resultsEl.innerHTML = '<div class="info-box" style="color: var(--red);">No valid triangles found in correlation matrix.</div>';
+                statusEl.textContent = '';
+                return;
+            }
+
+            // Build initial fair vols from realized vols (only pairs that appear in triangles)
+            const pairsInTriangles = new Set();
+            triangles.forEach(t => {
+                pairsInTriangles.add(t.pair1);
+                pairsInTriangles.add(t.pair2);
+                pairsInTriangles.add(t.crossPair);
+            });
+
+            const fairVols = {};
+            const realizedVols = window.realizedVols;
+            pairsInTriangles.forEach(pair => {
+                // Try direct, then inverse
+                if (realizedVols[pair] !== undefined) {
+                    fairVols[pair] = realizedVols[pair];
+                } else {
+                    const inv = pair.substring(3, 6) + pair.substring(0, 3);
+                    if (realizedVols[inv] !== undefined) {
+                        fairVols[pair] = realizedVols[inv];
+                    }
+                }
+            });
+
+            statusEl.textContent = `Optimizing ${Object.keys(fairVols).length} pairs across ${triangles.length} triangles...`;
+
+            // Use setTimeout to allow UI to update before heavy computation
+            setTimeout(() => {
+                const lambdaSlider = document.getElementById('lambdaSlider');
+                const lambda = lambdaSlider ? Math.pow(10, parseFloat(lambdaSlider.value)) : 0.01;
+
+                const result = optimizeFairVols(fairVols, triangles, realizedVols, {
+                    learningRate: 0.0001,
+                    lambda: lambda,
+                    maxIter: 2000,
+                    tolerance: 1e-10
+                });
+
+                statusEl.textContent = `Converged in ${result.iterations} iterations (residual: ${result.finalObjective.toExponential(3)})`;
+                displayFairValueResults(result.fairVols, result, triangles);
+            }, 50);
+        }
+
+        function extractTrianglesFromMatrix(correlationMatrix, impliedVols) {
+            const triangles = [];
+            const seen = new Set();
+
+            Object.keys(correlationMatrix).forEach(pair => {
+                const pairData = correlationMatrix[pair];
+                if (!pairData.viaIntermediates) return;
+
+                Object.keys(pairData.viaIntermediates).forEach(intermediate => {
+                    const cell = pairData.viaIntermediates[intermediate];
+                    if (!cell || cell.impliedCorr === null || cell.impliedCorr === undefined) return;
+
+                    // Resolve actual vol keys (handle inverse pairs)
+                    const p1 = resolveVolKey(cell.pair1, impliedVols);
+                    const p2 = resolveVolKey(cell.pair2, impliedVols);
+                    const cp = resolveVolKey(pair, impliedVols);
+
+                    if (!p1 || !p2 || !cp) return;
+
+                    // Deduplicate: sort the three pairs to form a canonical key
+                    const key = [p1, p2, cp].sort().join('|');
+                    if (seen.has(key)) return;
+                    seen.add(key);
+
+                    triangles.push({
+                        pair1: p1,
+                        pair2: p2,
+                        crossPair: cp,
+                        targetCorr: cell.impliedCorr
+                    });
+                });
+            });
+
+            console.log(`Extracted ${triangles.length} unique triangles`);
+            return triangles;
+        }
+
+        function resolveVolKey(pair, vols) {
+            if (vols[pair] !== undefined) return pair;
+            const inv = pair.substring(3, 6) + pair.substring(0, 3);
+            if (vols[inv] !== undefined) return inv;
+            return null;
+        }
+
+        function optimizeFairVols(fairVols, triangles, realizedVols, params) {
+            const { learningRate, lambda, maxIter, tolerance } = params;
+            const pairs = Object.keys(fairVols);
+            const convergenceHistory = [];
+            let prevObjective = Infinity;
+
+            for (let iter = 0; iter < maxIter; iter++) {
+                // Compute objective
+                let corrLoss = 0;
+                let regLoss = 0;
+
+                // Correlation loss
+                triangles.forEach(t => {
+                    const rhoFair = calcCorr(fairVols, t.pair1, t.pair2, t.crossPair);
+                    if (rhoFair === null) return;
+                    corrLoss += (rhoFair - t.targetCorr) ** 2;
+                });
+
+                // Regularization loss
+                pairs.forEach(p => {
+                    const realVol = lookupVol(realizedVols, p);
+                    if (realVol && realVol > 0) {
+                        regLoss += lambda * ((fairVols[p] - realVol) / realVol) ** 2;
+                    }
+                });
+
+                const objective = corrLoss + regLoss;
+                convergenceHistory.push(objective);
+
+                if (Math.abs(prevObjective - objective) < tolerance) {
+                    return { fairVols: { ...fairVols }, iterations: iter + 1, finalObjective: objective, convergenceHistory };
+                }
+                prevObjective = objective;
+
+                // Compute gradients
+                const gradients = {};
+                pairs.forEach(p => { gradients[p] = 0; });
+
+                triangles.forEach(t => {
+                    const a = fairVols[t.pair1];
+                    const b = fairVols[t.pair2];
+                    const c = fairVols[t.crossPair];
+                    if (!a || !b || !c) return;
+
+                    const rhoFair = (a * a + b * b - c * c) / (2 * a * b);
+                    const residual = rhoFair - t.targetCorr;
+                    const factor = 2 * residual;
+
+                    // ∂ρ/∂a = (a² - b² + c²) / (2a²b)
+                    if (gradients[t.pair1] !== undefined) {
+                        gradients[t.pair1] += factor * (a * a - b * b + c * c) / (2 * a * a * b);
+                    }
+                    // ∂ρ/∂b = (b² - a² + c²) / (2ab²)
+                    if (gradients[t.pair2] !== undefined) {
+                        gradients[t.pair2] += factor * (b * b - a * a + c * c) / (2 * a * b * b);
+                    }
+                    // ∂ρ/∂c = -c / (ab)
+                    if (gradients[t.crossPair] !== undefined) {
+                        gradients[t.crossPair] += factor * (-c / (a * b));
+                    }
+                });
+
+                // Add regularization gradient: 2λ·(σ_fair - σ_real) / σ_real²
+                pairs.forEach(p => {
+                    const realVol = lookupVol(realizedVols, p);
+                    if (realVol && realVol > 0) {
+                        gradients[p] += 2 * lambda * (fairVols[p] - realVol) / (realVol * realVol);
+                    }
+                });
+
+                // Update
+                pairs.forEach(p => {
+                    fairVols[p] -= learningRate * gradients[p];
+                    if (fairVols[p] < 0.0001) fairVols[p] = 0.0001;
+                });
+            }
+
+            return { fairVols: { ...fairVols }, iterations: maxIter, finalObjective: prevObjective, convergenceHistory };
+        }
+
+        function calcCorr(vols, p1, p2, cross) {
+            const a = lookupVol(vols, p1);
+            const b = lookupVol(vols, p2);
+            const c = lookupVol(vols, cross);
+            if (!a || !b || !c || a === 0 || b === 0) return null;
+            const rho = (a * a + b * b - c * c) / (2 * a * b);
+            return Math.max(-1, Math.min(1, rho));
+        }
+
+        function lookupVol(vols, pair) {
+            if (vols[pair] !== undefined) return vols[pair];
+            const inv = pair.substring(3, 6) + pair.substring(0, 3);
+            if (vols[inv] !== undefined) return vols[inv];
+            return null;
+        }
+
+        function displayFairValueResults(fairVols, optimizationInfo, triangles) {
+            const resultsEl = document.getElementById('fairValueResults');
+            const impliedVols = batchData.impliedVols;
+
+            // Build rows: pair, impliedVol, realizedVol, fairVol, signal
+            const rows = [];
+            Object.keys(fairVols).forEach(pair => {
+                const implVol = lookupVol(impliedVols, pair);
+                const realVol = lookupVol(window.realizedVols, pair);
+                const fairVol = fairVols[pair];
+                if (implVol === null || implVol === undefined) return;
+
+                const signal = fairVol - implVol;
+                rows.push({ pair, impliedVol: implVol, realizedVol: realVol, fairVol, signal });
+            });
+
+            // Sort by |signal| descending
+            rows.sort((a, b) => Math.abs(b.signal) - Math.abs(a.signal));
+
+            // Compute max abs signal for color scaling
+            const maxAbsSignal = rows.reduce((max, r) => Math.max(max, Math.abs(r.signal)), 0);
+
+            // Summary
+            let html = `
+                <div class="fair-value-summary">
+                    <span>Pairs optimized: <strong>${Object.keys(fairVols).length}</strong></span>
+                    <span>Triangles used: <strong>${triangles.length}</strong></span>
+                    <span>Iterations: <strong>${optimizationInfo.iterations}</strong></span>
+                    <span>Final residual: <strong>${optimizationInfo.finalObjective.toExponential(3)}</strong></span>
+                </div>
+            `;
+
+            // Main table
+            html += generateFairValueTable(rows, maxAbsSignal);
+
+            // Residual correlation matrix
+            html += '<h3 style="margin: 24px 0 10px 0; font-size: 15px;">Residual Correlation Matrix (Fair Value Vols)</h3>';
+            html += '<p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Shows correlation differentials using fair value vols vs implied. Differentials should be near zero if optimization succeeded.</p>';
+
+            const fairMatrix = buildFairValueCorrelationMatrix(fairVols, window.correlationMatrix, impliedVols);
+            const currencies = batchData.currencies || [];
+            html += generateCorrelationMatrixDisplay(fairMatrix, currencies);
+
+            resultsEl.innerHTML = html;
+        }
+
+        function generateFairValueTable(rows, maxAbsSignal) {
+            if (rows.length === 0) return '<div class="info-box">No fair value data.</div>';
+
+            let html = `
+                <table class="data-table" id="fairValueTable">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable(this, 0, 'string')" style="cursor: pointer;">Pair ▾</th>
+                            <th onclick="sortTable(this, 1, 'number')" style="cursor: pointer;">Implied Vol ▾</th>
+                            <th onclick="sortTable(this, 2, 'number')" style="cursor: pointer;">Realized Vol ▾</th>
+                            <th onclick="sortTable(this, 3, 'number')" style="cursor: pointer;">Fair Vol ▾</th>
+                            <th onclick="sortTable(this, 4, 'number')" style="cursor: pointer;">Fair−Impl ▾</th>
+                            <th onclick="sortTable(this, 5, 'number')" style="cursor: pointer;">Signal ▾</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            rows.forEach(r => {
+                const signalColor = getPnLColor(r.signal, maxAbsSignal);
+                const signalBadge = r.signal > 0.0001
+                    ? '<span class="signal-cheap">CHEAP</span>'
+                    : r.signal < -0.0001
+                        ? '<span class="signal-rich">RICH</span>'
+                        : '<span style="color: var(--text-muted);">FLAT</span>';
+
+                html += `
+                    <tr>
+                        <td style="font-weight: 600;">${r.pair}</td>
+                        <td>${(r.impliedVol * 100).toFixed(2)}%</td>
+                        <td>${r.realizedVol !== null ? (r.realizedVol * 100).toFixed(2) + '%' : 'N/A'}</td>
+                        <td>${(r.fairVol * 100).toFixed(2)}%</td>
+                        <td style="background: ${signalColor}; color: #000; font-weight: 600;" data-sort-value="${r.signal}">
+                            ${r.signal >= 0 ? '+' : ''}${(r.signal * 100).toFixed(2)}%
+                        </td>
+                        <td data-sort-value="${Math.abs(r.signal)}">${signalBadge}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function buildFairValueCorrelationMatrix(fairVols, originalMatrix, impliedVols) {
+            const fairMatrix = {};
+
+            Object.keys(originalMatrix).forEach(pair => {
+                const orig = originalMatrix[pair];
+                fairMatrix[pair] = {
+                    pair: orig.pair,
+                    base: orig.base,
+                    quote: orig.quote,
+                    viaIntermediates: {}
+                };
+
+                if (!orig.viaIntermediates) return;
+
+                Object.keys(orig.viaIntermediates).forEach(intermediate => {
+                    const cell = orig.viaIntermediates[intermediate];
+                    if (!cell) return;
+
+                    // Compute correlation using fair vols
+                    const fairCorr = calculateImpliedCorrelation(
+                        cell.pair1, cell.pair2, pair, fairVols
+                    );
+
+                    if (fairCorr !== null) {
+                        fairMatrix[pair].viaIntermediates[intermediate] = {
+                            pair1: cell.pair1,
+                            pair2: cell.pair2,
+                            pair1Inverted: cell.pair1Inverted,
+                            pair2Inverted: cell.pair2Inverted,
+                            impliedCorr: cell.impliedCorr,
+                            realizedCorr: fairCorr,
+                            difference: fairCorr - cell.impliedCorr
+                        };
+                    }
+                });
+            });
+
+            return fairMatrix;
+        }
+
         function displayResultsWithTabs(pnlResults, correlationResults) {
             // Store results globally for export functions
             window.batchAnalysisResults = pnlResults;
@@ -6800,6 +7223,9 @@ Full report in email.
                         <button class="batch-tab" data-tab="sessions" onclick="switchBatchTab('sessions')">
                             📁 Sessions
                         </button>
+                        <button class="batch-tab" data-tab="fairvalue" onclick="switchBatchTab('fairvalue')">
+                            📐 Fair Value
+                        </button>
                     </div>
                 </div>
 
@@ -6867,6 +7293,10 @@ Full report in email.
 
                 <div id="tab-sessions" class="batch-tab-panel">
                     ${generateSessionsTab()}
+                </div>
+
+                <div id="tab-fairvalue" class="batch-tab-panel">
+                    ${generateFairValueTab()}
                 </div>
             `;
 
