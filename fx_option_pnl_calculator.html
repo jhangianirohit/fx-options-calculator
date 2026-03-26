@@ -11949,7 +11949,8 @@ Full report in email.
             animationId: null,
             isPlaying: false,
             currentIdx: 0,
-            speed: 10, // points per frame
+            speed: 1, // points per frame (fractional = skip frames)
+            frameCount: 0, // counter for fractional speeds
             pnlData: null,
             pair: null,
             strikeName: null,
@@ -12082,7 +12083,7 @@ Full report in email.
                 btn.onclick = function() {
                     document.querySelectorAll('.gt-speed-btn').forEach(b => b.classList.remove('gt-speed-active'));
                     this.classList.add('gt-speed-active');
-                    gtState.speed = parseInt(this.getAttribute('data-speed'));
+                    gtState.speed = parseFloat(this.getAttribute('data-speed'));
                 };
             });
 
@@ -12323,6 +12324,7 @@ Full report in email.
             }
 
             gtState.isPlaying = true;
+            gtState.frameCount = 0;
             document.getElementById('gtPlayBtn').textContent = 'Pause';
 
             function step() {
@@ -12337,8 +12339,18 @@ Full report in email.
                     return;
                 }
 
-                // Advance by speed points
-                gtState.currentIdx = Math.min(gtState.currentIdx + gtState.speed, pnlData.length - 1);
+                // Handle fractional speeds: advance 1 point every N frames
+                gtState.frameCount++;
+                if (gtState.speed < 1) {
+                    const framesPerStep = Math.round(1 / gtState.speed);
+                    if (gtState.frameCount % framesPerStep !== 0) {
+                        gtState.animationId = requestAnimationFrame(step);
+                        return;
+                    }
+                    gtState.currentIdx = Math.min(gtState.currentIdx + 1, pnlData.length - 1);
+                } else {
+                    gtState.currentIdx = Math.min(gtState.currentIdx + Math.round(gtState.speed), pnlData.length - 1);
+                }
                 renderGTFrame(gtState.currentIdx);
 
                 if (gtState.currentIdx >= pnlData.length - 1) {
@@ -12447,10 +12459,10 @@ Full report in email.
                     <button id="gtResetBtn" class="btn btn-secondary" style="font-family: var(--font-mono);">Reset</button>
                     <div style="display: flex; align-items: center; gap: 8px; margin-left: 16px;">
                         <span style="font-size: 12px; color: var(--text-muted);">Speed:</span>
-                        <button class="btn btn-secondary gt-speed-btn" data-speed="1" style="padding: 4px 10px; font-size: 12px;">1x</button>
-                        <button class="btn btn-secondary gt-speed-btn" data-speed="3" style="padding: 4px 10px; font-size: 12px;">3x</button>
-                        <button class="btn btn-secondary gt-speed-btn gt-speed-active" data-speed="10" style="padding: 4px 10px; font-size: 12px;">10x</button>
-                        <button class="btn btn-secondary gt-speed-btn" data-speed="50" style="padding: 4px 10px; font-size: 12px;">50x</button>
+                        <button class="btn btn-secondary gt-speed-btn" data-speed="0.25" style="padding: 4px 10px; font-size: 12px;">.25x</button>
+                        <button class="btn btn-secondary gt-speed-btn" data-speed="0.5" style="padding: 4px 10px; font-size: 12px;">.5x</button>
+                        <button class="btn btn-secondary gt-speed-btn gt-speed-active" data-speed="1" style="padding: 4px 10px; font-size: 12px;">1x</button>
+                        <button class="btn btn-secondary gt-speed-btn" data-speed="2" style="padding: 4px 10px; font-size: 12px;">2x</button>
                         <button class="btn btn-secondary gt-speed-btn" data-speed="0" style="padding: 4px 10px; font-size: 12px;">All</button>
                     </div>
                     <!-- Progress -->
