@@ -5032,33 +5032,32 @@ th {
             const expiryText = `${expiryHours} hours`;
 
             return `
-<div style="background: #0d1117; color: #e5e5e5; padding: 12px 16px; border-radius: 4px; border-left: 3px solid #06b6d4; margin-bottom: 16px; font-family: Consolas, Monaco, 'Courier New', monospace;">
-    <h2 style="margin: 0 0 10px 0; font-size: 14px; color: #ffffff; border-bottom: 2px solid #06b6d4; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.1em; font-family: Consolas, Monaco, 'Courier New', monospace;">
-        FX Options P&L, Vol, Correlation Analysis - ${formatDateTime(startTime)} to ${formatDateTime(endTime)}
+<div style="padding: 10px 16px; border-left: 3px solid #06b6d4; margin-bottom: 12px; font-family: Consolas, Monaco, 'Courier New', monospace; background: #f0f4f8; border-bottom: 1px solid #d1d5db;">
+    <h2 style="margin: 0 0 8px 0; font-size: 14px; color: #0d1117; border-bottom: 2px solid #06b6d4; padding-bottom: 6px; letter-spacing: 0.05em; font-family: Consolas, Monaco, 'Courier New', monospace;">
+        FX Options P&amp;L, Vol, Correlation Analysis - ${formatDateTime(startTime)} to ${formatDateTime(endTime)}
     </h2>
-
-    <table style="width: 100%; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 11px; border-collapse: collapse; color: #e5e5e5;">
+    <table style="width: 100%; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 11px; border-collapse: collapse; color: #1f2937;">
         <tr>
-            <td style="padding: 3px 8px; width: 33%; color: #06b6d4;"><strong>Analysis Period:</strong></td>
-            <td style="padding: 3px 8px; width: 33%;">${formatDateTime(startTime)} to ${formatDateTime(endTime)}</td>
-            <td style="padding: 3px 8px; width: 33%; color: #06b6d4;"><strong>Rebalancing:</strong></td>
-            <td style="padding: 3px 8px;">Every ${rebalFreq}</td>
+            <td style="padding: 2px 8px; width: 33%; color: #0369a1;"><strong>Analysis Period:</strong></td>
+            <td style="padding: 2px 8px; width: 33%; color: #1f2937;">${formatDateTime(startTime)} to ${formatDateTime(endTime)}</td>
+            <td style="padding: 2px 8px; width: 33%; color: #0369a1;"><strong>Rebalancing:</strong></td>
+            <td style="padding: 2px 8px; color: #1f2937;">Every ${rebalFreq}</td>
         </tr>
         <tr>
-            <td style="padding: 3px 8px; color: #06b6d4;"><strong>Duration:</strong></td>
-            <td style="padding: 3px 8px;">${durationHours} hours</td>
-            <td style="padding: 3px 8px; color: #06b6d4;"><strong>Option Expiry:</strong></td>
-            <td style="padding: 3px 8px;">${expiryText}</td>
+            <td style="padding: 2px 8px; color: #0369a1;"><strong>Duration:</strong></td>
+            <td style="padding: 2px 8px; color: #1f2937;">${durationHours} hours</td>
+            <td style="padding: 2px 8px; color: #0369a1;"><strong>Option Expiry:</strong></td>
+            <td style="padding: 2px 8px; color: #1f2937;">${expiryText}</td>
         </tr>
         <tr>
-            <td style="padding: 3px 8px; color: #06b6d4;"><strong>Pairs Analyzed:</strong></td>
-            <td style="padding: 3px 8px;">${analyzedPairs.length} pairs (${usdCount} USD, ${crossCount} cross)</td>
-            <td style="padding: 3px 8px; color: #06b6d4;"><strong>Base Notional:</strong></td>
-            <td style="padding: 3px 8px;">$100M USD equivalent per strike</td>
+            <td style="padding: 2px 8px; color: #0369a1;"><strong>Pairs Analyzed:</strong></td>
+            <td style="padding: 2px 8px; color: #1f2937;">${analyzedPairs.length} pairs (${usdCount} USD, ${crossCount} cross)</td>
+            <td style="padding: 2px 8px; color: #0369a1;"><strong>Base Notional:</strong></td>
+            <td style="padding: 2px 8px; color: #1f2937;">$100M USD equivalent per strike</td>
         </tr>
         <tr>
-            <td style="padding: 3px 8px; color: #06b6d4;"><strong>Strikes Analyzed:</strong></td>
-            <td colspan="3" style="padding: 3px 8px;">10Δ Put, 25Δ Put, ATM Call, 25Δ Call, 10Δ Call</td>
+            <td style="padding: 2px 8px; color: #0369a1;"><strong>Strikes Analyzed:</strong></td>
+            <td colspan="3" style="padding: 2px 8px; color: #1f2937;">10&#916; Put, 25&#916; Put, ATM Call, 25&#916; Call, 10&#916; Call</td>
         </tr>
     </table>
 </div>`;
@@ -5130,7 +5129,7 @@ th {
     </table>
 </div>`;
 
-            return html;
+            return html.trim();
         }
 
         function generateBottom5VolTable(pnlResults, scales) {
@@ -5274,7 +5273,7 @@ th {
     </table>
 </div>`;
 
-            return html;
+            return html.trim();
         }
 
         function generateBottom5CorrTable(correlationResults, scales) {
@@ -5349,7 +5348,7 @@ th {
     </table>
 </div>`;
 
-            return html;
+            return html.trim();
         }
 
         function buildCurrencyGroups(pnlResults, currencies) {
@@ -5522,7 +5521,7 @@ th {
     </div>
 </div>`;
 
-            return html;
+            return html.trim();
         }
 
         function generateCurrencyCorrSection(currency, groupData, scales) {
@@ -5618,7 +5617,7 @@ th {
     </div>
 </div>`;
 
-            return html;
+            return html.trim();
         }
 
         function restructureCorrelations(correlationResults) {
@@ -5870,7 +5869,7 @@ th {
     </div>
 </div>`;
 
-            return html;
+            return html.trim();
         }
 
         function generateEmailReport() {
@@ -5890,27 +5889,7 @@ th {
         body { font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 11px; margin: 0 auto; padding: 12px; background: #f8f9fa; color: #1f2937; }
     </style>
 </head>
-<body style="font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 11px; margin: 0 auto; padding: 12px; background: #f8f9fa; color: #1f2937;">
-
-${generateEmailHeader(window.analysisConfig || {}, window.analyzedPairs, window.uploadedTimestamps, window.currencies || [])}
-
-${generateTop5VolTable(window.batchAnalysisResults, scales)}
-
-${generateBottom5VolTable(window.batchAnalysisResults, scales)}
-
-${Object.keys(window.correlationAnalysisResults || {}).length > 0 ? generateTop5CorrTable(window.correlationAnalysisResults, scales) : ''}
-
-${Object.keys(window.correlationAnalysisResults || {}).length > 0 ? generateBottom5CorrTable(window.correlationAnalysisResults, scales) : ''}
-
-${generateExpandableFullResults(window.batchAnalysisResults, window.correlationAnalysisResults, scales, window.currencies || [])}
-
-${/* Correlation matrix section removed from email - only available on webpage */ ''}
-
-<div style="margin-top: 16px; padding-top: 8px; border-top: 1px solid #06b6d4; text-align: center; color: #6b7280; font-size: 10px; font-family: Consolas, Monaco, 'Courier New', monospace; text-transform: uppercase; letter-spacing: 0.08em;">
-    Generated: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST
-</div>
-
-</body>
+<body style="font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 11px; margin: 0 auto; padding: 12px; background: #f8f9fa; color: #1f2937;">${generateEmailHeader(window.analysisConfig || {}, window.analyzedPairs, window.uploadedTimestamps, window.currencies || [])}${generateTop5VolTable(window.batchAnalysisResults, scales)}${generateBottom5VolTable(window.batchAnalysisResults, scales)}${Object.keys(window.correlationAnalysisResults || {}).length > 0 ? generateTop5CorrTable(window.correlationAnalysisResults, scales) : ''}${Object.keys(window.correlationAnalysisResults || {}).length > 0 ? generateBottom5CorrTable(window.correlationAnalysisResults, scales) : ''}${generateExpandableFullResults(window.batchAnalysisResults, window.correlationAnalysisResults, scales, window.currencies || [])}<div style="margin-top: 12px; padding-top: 6px; border-top: 1px solid #d1d5db; text-align: center; color: #6b7280; font-size: 10px; font-family: Consolas, Monaco, 'Courier New', monospace; letter-spacing: 0.05em;">Generated: ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} EST</div></body>
 </html>`;
 
             return emailHTML;
