@@ -11952,6 +11952,27 @@ Full report in email.
             timestamps: null
         };
 
+        function showGTError(msg) {
+            const modal = document.getElementById('gammaThetaModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+                document.getElementById('gtModalTitle').textContent = 'Gamma-Theta Evolution';
+                document.getElementById('gtModalCloseBtn').onclick = closeGammaThetaModal;
+                document.getElementById('gtModalCloseBtnFooter').onclick = closeGammaThetaModal;
+                modal.onclick = function(e) { if (e.target === modal) closeGammaThetaModal(); };
+                const container = document.getElementById('gtChartContainer');
+                if (container) {
+                    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--red);font-size:13px;padding:20px;text-align:center;">' + msg + '</div>';
+                }
+                const info = document.getElementById('gtStrikeInfo');
+                if (info) info.innerHTML = '';
+                document.getElementById('gtScoreboard').style.display = 'none';
+                document.getElementById('gtStatusLine').textContent = '';
+            }
+        }
+
         function openGammaThetaModal(pair, strikeType) {
             const modal = document.getElementById('gammaThetaModal');
             if (!modal) return;
@@ -11969,7 +11990,8 @@ Full report in email.
             const pairData = window.lastPnLResults && window.lastPnLResults[pair];
 
             if (!pairData || !pairData.strikes || !pairData.strikes[strikeName]) {
-                alert('No data available for ' + pair + ' ' + strikeName + '. Run analysis first.');
+                console.error('[GT] No data for', pair, strikeName);
+                showGTError('No data available for ' + pair + ' ' + strikeName + '. Run analysis first.');
                 return;
             }
 
@@ -11977,13 +11999,15 @@ Full report in email.
             const pnlData = strikeData.pnlData;
 
             if (!pnlData || pnlData.length < 2) {
-                alert('Insufficient data points for animation.');
+                console.error('[GT] Insufficient data points:', pnlData?.length);
+                showGTError('Insufficient data points for animation.');
                 return;
             }
 
-            // Check that gamma/theta data exists
+            // Check that gamma/theta data exists (requires re-run after code update)
             if (pnlData[1].cumThetaPnL === undefined) {
-                alert('Gamma/Theta data not computed. Please re-run analysis.');
+                console.error('[GT] cumThetaPnL missing — analysis was run with old code');
+                showGTError('Gamma/Theta data not found. Please re-run the analysis (the data was computed before this feature was added).');
                 return;
             }
 
@@ -12017,6 +12041,7 @@ Full report in email.
             modal.style.display = 'flex';
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+            document.getElementById('gtScoreboard').style.display = 'flex';
 
             // Update title
             document.getElementById('gtModalTitle').textContent = pair + ' — ' + strikeName + ' — Gamma vs Theta';
