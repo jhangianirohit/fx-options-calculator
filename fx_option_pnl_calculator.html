@@ -6805,7 +6805,7 @@ Full report in email.
                 html += generateRankingTable(top5, 1, scales);
                 html += '</div>';
                 html += '<div style="flex: 1; min-width: 400px;"><h4 style="color: var(--red); margin: 0 0 8px 0;">Bottom 10</h4>';
-                html += generateRankingTable(bottom5, Math.max(1, pairResults.length - bottom5.length + 1), scales);
+                html += generateRankingTable(bottom5, pairResults.length, scales, true);
                 html += '</div>';
                 html += '</div>';
 
@@ -8615,11 +8615,10 @@ Full report in email.
 
             // Bottom 10 Vol Performers
             const bottom5Vol = pairResults.slice(-10).reverse();
-            const bottom5StartRank = Math.max(1, pairResults.length - bottom5Vol.length + 1);
             html += `
                 <div class="summary-section">
                     <h3>📉 Bottom 10 P&L Performers</h3>
-                    ${generateRankingTable(bottom5Vol, bottom5StartRank, scales)}
+                    ${generateRankingTable(bottom5Vol, pairResults.length, scales, true)}
                 </div>
             `;
 
@@ -9560,7 +9559,6 @@ Full report in email.
             // Top 10 / Bottom 10 Rankings
             const top5 = pairResults.slice(0, 10);
             const bottom5 = pairResults.slice(-10).reverse();
-            const bottom5StartRank = Math.max(1, pairResults.length - bottom5.length + 1);
 
             html += `
             <div class="card">
@@ -9570,7 +9568,7 @@ Full report in email.
 
             <div class="card">
                 <h3 class="currency-header" style="text-align: center; border-left: 3px solid var(--red);">📉 BOTTOM 10 PERFORMERS</h3>
-                ${generateRankingTable(bottom5, bottom5StartRank, scales)}
+                ${generateRankingTable(bottom5, pairResults.length, scales, true)}
             </div>`;
 
             // Currency Groups
@@ -9926,17 +9924,14 @@ Full report in email.
             const top5 = pairResults.slice(0, 10);
             const bottom5 = pairResults.slice(-10).reverse();
 
-            // Calculate correct start rank for bottom 10
-            const bottom5StartRank = Math.max(1, pairResults.length - bottom5.length + 1);
-
             // Calculate scales once using ALL pairs for consistent coloring across both tables
             const scales = calculateTabScales(pairResults);
 
             document.getElementById('top5Table').innerHTML = generateRankingTable(top5, 1, scales);
-            document.getElementById('bottom5Table').innerHTML = generateRankingTable(bottom5, bottom5StartRank, scales);
+            document.getElementById('bottom5Table').innerHTML = generateRankingTable(bottom5, pairResults.length, scales, true);
         }
 
-        function generateRankingTable(pairs, startRank, scales) {
+        function generateRankingTable(pairs, startRank, scales, descending) {
             // scales: { strikePnLMaxAbs, avgPnLMaxAbs } - pre-calculated at tab level for consistent coloring
 
             let html = '<div class="card" style="overflow-x: auto;"><table class="data-table" style="min-width: 900px; font-size: 13px;"><thead><tr>';
@@ -9964,7 +9959,7 @@ Full report in email.
             };
 
             pairs.forEach(([pair, result], idx) => {
-                const rank = startRank + idx;
+                const rank = descending ? startRank - idx : startRank + idx;
                 const avgColor = getPnLColor(result.avgPnL * 1000, scales?.avgPnLMaxAbs);
 
                 html += '<tr>';
