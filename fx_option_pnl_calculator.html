@@ -5166,7 +5166,7 @@ th {
         <tbody>`;
 
             sorted.forEach((item, idx) => {
-                const rank = totalPairs - 4 + idx;
+                const rank = totalPairs - idx;
                 // Calculate background colors (email uses light pastels)
                 const implVolBgColor = getEmailCellColor(item.impliedVol, scales.impliedVol);
                 const realVolBgColor = getEmailCellColor(item.realizedVol, scales.realizedVol);
