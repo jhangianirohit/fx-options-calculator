@@ -8983,9 +8983,7 @@ Full report in email.
                 <div class="card" style="margin-bottom: 24px;">
                     <h3 class="currency-header">About This Analysis</h3>
                     <p style="margin-bottom: 12px;">
-                        This module decomposes FX pair volatilities into contributions from "universal basket" exposures.
-                        It automatically detects currencies from your uploaded data and finds the <strong>largest complete basket</strong>
-                        (the largest set of currencies where all pairwise vols are available).
+                        This module decomposes FX pair volatilities into contributions from "universal basket" exposures using the Leave-One-Out (LOO) method. Choose <strong>Implied Only</strong> (uses uploaded vol data), <strong>Realized Only</strong> (computes vols from spot data), or <strong>Both</strong> for side-by-side comparison.
                     </p>
                     <p style="color: var(--text-muted);">
                         The analysis constructs a covariance matrix from pair volatilities, then derives
@@ -8997,6 +8995,25 @@ Full report in email.
                     <h3 class="currency-header">Input Status</h3>
                     <div id="basketInputStatus">
                         ${generateBasketInputStatus()}
+                    </div>
+                    <div style="margin-top: 12px; margin-bottom: 8px;">
+                        <strong style="color: var(--text-secondary);">Decomposition Mode:</strong>
+                        <div style="display: flex; gap: 16px; margin-top: 6px; flex-wrap: wrap;">
+                            <label style="cursor: pointer;"><input type="radio" name="basketMode" value="implied" checked onchange="onBasketModeChange()"> Implied Only</label>
+                            <label style="cursor: pointer;"><input type="radio" name="basketMode" value="realized" onchange="onBasketModeChange()"> Realized Only</label>
+                            <label style="cursor: pointer;"><input type="radio" name="basketMode" value="both" onchange="onBasketModeChange()"> Both (side-by-side)</label>
+                        </div>
+                    </div>
+                    <div id="basketRealizedSettings" style="display: none; margin-top: 8px; padding: 8px 12px; background: rgba(6, 182, 212, 0.08); border: 1px solid var(--border); border-radius: 4px;">
+                        <label style="font-size: 11px; color: var(--text-secondary);">Realized Vol Hedge Frequency (min):
+                            <select id="basketHedgeFreq" style="margin-left: 8px;">
+                                <option value="10">10</option>
+                                <option value="30">30</option>
+                                <option value="60" selected>60</option>
+                                <option value="120">120</option>
+                                <option value="240">240</option>
+                            </select>
+                        </label>
                     </div>
                     <div style="margin-top: 16px;">
                         <button class="btn btn-primary" onclick="computeBasketDecomposition()" id="computeBasketBtn">
@@ -9120,35 +9137,127 @@ Full report in email.
             return null;
         }
 
+        function onBasketModeChange() {
+            const mode = document.querySelector('input[name="basketMode"]:checked')?.value || 'implied';
+            const settingsDiv = document.getElementById('basketRealizedSettings');
+            if (settingsDiv) {
+                settingsDiv.style.display = (mode === 'realized' || mode === 'both') ? 'block' : 'none';
+            }
+        }
+
+        function detectCurrenciesFromSpots() {
+            // Detect currencies from spot price data (for realized-only mode)
+            const spotPrices = (window.currentAnalysisData || batchData).spotPrices || {};
+            const currencySet = new Set();
+            Object.keys(spotPrices).forEach(pair => {
+                if (pair.length === 6) {
+                    currencySet.add(pair.slice(0, 3));
+                    currencySet.add(pair.slice(3, 6));
+                }
+            });
+            return Array.from(currencySet).sort((a, b) => {
+                const orderA = MARKET_ORDER.indexOf(a) === -1 ? 999 : MARKET_ORDER.indexOf(a);
+                const orderB = MARKET_ORDER.indexOf(b) === -1 ? 999 : MARKET_ORDER.indexOf(b);
+                return orderA - orderB;
+            });
+        }
+
+        function computeBasketRealizedVols(currencies, hedgeFreq) {
+            const realizedVols = {};
+            const analysisData = window.currentAnalysisData || batchData;
+            const baseFreq = analysisData.frequency || batchData.frequency || 10;
+            const spotPrices = analysisData.spotPrices || {};
+
+            for (let i = 0; i < currencies.length; i++) {
+                for (let j = i + 1; j < currencies.length; j++) {
+                    const pair = getCanonicalPairName(currencies[i], currencies[j]);
+                    let spots = spotPrices[pair];
+
+                    // Try inverse pair name
+                    if (!spots) {
+                        const inv = pair.slice(3, 6) + pair.slice(0, 3);
+                        spots = spotPrices[inv];
+                    }
+
+                    // Try to synthesize cross from USD pairs
+                    if (!spots) {
+                        const usdPairs = batchData.usdPairs || [];
+                        spots = deriveCrossSeries(pair, spotPrices, usdPairs, batchData.timestamps || []);
+                    }
+
+                    if (spots && spots.length >= 2) {
+                        const numPoints = spots.length;
+                        const totalMinutes = (numPoints - 1) * baseFreq;
+                        const totalDays = totalMinutes / (60 * 24);
+                        const hedgeTimes = calculateHedgeTimes(totalMinutes, hedgeFreq);
+                        const vol = calculateRealizedVolatility(spots, totalDays, hedgeTimes, baseFreq);
+                        realizedVols[pair] = vol;
+                    }
+                }
+            }
+            return realizedVols;
+        }
+
         function computeBasketDecomposition() {
-            const currencies = window.validBasketCurrencies || findLargestCompleteBasket(detectCurrenciesFromVols());
+            const mode = document.querySelector('input[name="basketMode"]:checked')?.value || 'implied';
+
+            // Detect currencies based on mode
+            let currencies;
+            if (mode === 'realized') {
+                // For realized-only, detect from spot data
+                const spotCurrencies = detectCurrenciesFromSpots();
+                currencies = spotCurrencies.length >= 2 ? spotCurrencies : [];
+            } else {
+                currencies = window.validBasketCurrencies || findLargestCompleteBasket(detectCurrenciesFromVols());
+            }
 
             if (currencies.length < 2) {
-                alert('Cannot find a complete basket with at least 2 currencies.\nA complete basket requires all pairwise volatilities between the included currencies.');
+                alert('Cannot find a complete basket with at least 2 currencies.\n' +
+                      (mode === 'realized' ? 'Upload spot data with at least 2 currency pairs.' :
+                       'A complete basket requires all pairwise volatilities between the included currencies.'));
                 return;
             }
 
             try {
-                // --- IMPLIED VOL ANALYSIS ---
-                const implCov = buildCovarianceMatrixDynamic(currencies, getVolForPair);
-                const { fullBasketVols: implFullBV, looBasketVols: implLooBV } = calculateBasketVolatilitiesDynamic(currencies, implCov, getVolForPair);
-                const implDecomps = calculatePairDecompositionsDynamic(currencies, implFullBV, implLooBV, getVolForPair);
-                const implCorrs = calculateBasketCorrelationMatrixDynamic(currencies, implCov, implFullBV, implLooBV, getVolForPair);
-
-                // --- REALIZED VOL ANALYSIS ---
+                let implied = null;
                 let realized = null;
-                if (window.realizedVols && Object.keys(window.realizedVols).length > 0) {
-                    // Find complete basket for realized vols (may be smaller)
-                    const realCurrencies = findLargestCompleteBasket(currencies, getRealizedVolForPair);
-                    if (realCurrencies.length >= 2) {
-                        const realCov = buildCovarianceMatrixDynamic(realCurrencies, getRealizedVolForPair);
-                        const { fullBasketVols: realFullBV, looBasketVols: realLooBV } = calculateBasketVolatilitiesDynamic(realCurrencies, realCov, getRealizedVolForPair);
-                        const realDecomps = calculatePairDecompositionsDynamic(realCurrencies, realFullBV, realLooBV, getRealizedVolForPair);
-                        const realCorrs = calculateBasketCorrelationMatrixDynamic(realCurrencies, realCov, realFullBV, realLooBV, getRealizedVolForPair);
 
+                // --- IMPLIED ---
+                if (mode === 'implied' || mode === 'both') {
+                    const implCov = buildCovarianceMatrixDynamic(currencies, getVolForPair);
+                    const { fullBasketVols: implFullBV, looBasketVols: implLooBV } = calculateBasketVolatilitiesDynamic(currencies, implCov, getVolForPair);
+                    const implDecomps = calculatePairDecompositionsDynamic(currencies, implFullBV, implLooBV, getVolForPair);
+                    const implCorrs = calculateBasketCorrelationMatrixDynamic(currencies, implCov, implFullBV, implLooBV, getVolForPair);
+                    implied = {
+                        basketVols: implFullBV,
+                        looBasketVols: implLooBV,
+                        pairDecompositions: implDecomps,
+                        basketCorrelations: implCorrs
+                    };
+                }
+
+                // --- REALIZED ---
+                if (mode === 'realized' || mode === 'both') {
+                    const hedgeFreq = parseInt(document.getElementById('basketHedgeFreq')?.value) || 60;
+
+                    // Compute realized vols from spot data
+                    const basketRealVols = computeBasketRealizedVols(currencies, hedgeFreq);
+
+                    // Create lookup function
+                    const realVolLookup = (pair) => {
+                        const inv = pair.slice(3, 6) + pair.slice(0, 3);
+                        return basketRealVols[pair] ?? basketRealVols[inv] ?? null;
+                    };
+
+                    // Find largest complete basket for realized
+                    const realCurrencies = findLargestCompleteBasket(currencies, realVolLookup);
+                    if (realCurrencies.length >= 2) {
+                        const realCov = buildCovarianceMatrixDynamic(realCurrencies, realVolLookup);
+                        const { fullBasketVols: realFullBV, looBasketVols: realLooBV } = calculateBasketVolatilitiesDynamic(realCurrencies, realCov, realVolLookup);
+                        const realDecomps = calculatePairDecompositionsDynamic(realCurrencies, realFullBV, realLooBV, realVolLookup);
+                        const realCorrs = calculateBasketCorrelationMatrixDynamic(realCurrencies, realCov, realFullBV, realLooBV, realVolLookup);
                         realized = {
                             currencies: realCurrencies,
-                            covMatrix: realCov,
                             basketVols: realFullBV,
                             looBasketVols: realLooBV,
                             pairDecompositions: realDecomps,
@@ -9159,15 +9268,28 @@ Full report in email.
 
                 // Store results
                 window.basketDecompositionResults = {
+                    mode,
                     currencies,
-                    covMatrix: implCov,
-                    basketVols: implFullBV,
-                    looBasketVols: implLooBV,
-                    pairDecompositions: implDecomps,
-                    basketCorrelations: implCorrs,
+                    ...(implied ? {
+                        covMatrix: null,
+                        basketVols: implied.basketVols,
+                        looBasketVols: implied.looBasketVols,
+                        pairDecompositions: implied.pairDecompositions,
+                        basketCorrelations: implied.basketCorrelations
+                    } : {}),
                     realized,
                     timestamp: new Date().toISOString()
                 };
+
+                // For realized-only mode, put realized data in the top-level fields too
+                if (mode === 'realized' && realized) {
+                    window.basketDecompositionResults.basketVols = realized.basketVols;
+                    window.basketDecompositionResults.looBasketVols = realized.looBasketVols;
+                    window.basketDecompositionResults.pairDecompositions = realized.pairDecompositions;
+                    window.basketDecompositions = realized.basketCorrelations;
+                    window.basketDecompositionResults.basketCorrelations = realized.basketCorrelations;
+                    window.basketDecompositionResults.currencies = realized.currencies;
+                }
 
                 document.getElementById('basketResults').innerHTML = generateBasketResultsHTML();
 
@@ -9370,6 +9492,9 @@ Full report in email.
             const currencies = results.currencies || window.detectedBasketCurrencies || [];
             const n = currencies.length;
             const realized = results.realized;
+            const mode = results.mode || 'both';
+            const showImplied = (mode === 'implied' || mode === 'both');
+            const showRealized = (mode === 'realized' || mode === 'both');
 
             let html = '';
 
@@ -9384,10 +9509,10 @@ Full report in email.
                         <thead>
                             <tr>
                                 <th>Currency</th>
-                                <th>Implied Basket Vol</th>
-                                <th>Realized Basket Vol</th>
-                                <th>Impl - Real</th>
-                                <th>Rank (Impl)</th>
+                                ${showImplied ? '<th>Impl Basket Vol</th>' : ''}
+                                ${showRealized ? '<th>Real Basket Vol</th>' : ''}
+                                ${showImplied && showRealized ? '<th>Impl - Real</th>' : ''}
+                                <th>Rank</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -9401,15 +9526,15 @@ Full report in email.
             sortedCurrencies.forEach((ccy, rank) => {
                 const vol = (results.basketVols[ccy] || 0) * 100;
                 const realVol = (realized && realized.basketVols[ccy] !== undefined) ? realized.basketVols[ccy] * 100 : null;
-                const diff = realVol !== null ? vol - realVol : null;
+                const diff = (realVol !== null && showImplied) ? vol - realVol : null;
                 const volColor = vol > 10 ? 'var(--red)' : vol > 7 ? 'var(--yellow)' : 'var(--green)';
                 const diffColor = diff !== null ? (diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--text-primary)') : '';
                 html += `
                     <tr>
                         <td><strong>${ccy}</strong></td>
-                        <td style="color: ${volColor}; font-weight: bold;">${vol.toFixed(2)}%</td>
-                        <td>${realVol !== null ? realVol.toFixed(2) + '%' : '—'}</td>
-                        <td style="color: ${diffColor}; font-weight: bold;">${diff !== null ? (diff > 0 ? '+' : '') + diff.toFixed(2) + '%' : '—'}</td>
+                        ${showImplied ? `<td style="color: ${volColor}; font-weight: bold;">${vol.toFixed(2)}%</td>` : ''}
+                        ${showRealized ? `<td>${realVol !== null ? realVol.toFixed(2) + '%' : '—'}</td>` : ''}
+                        ${showImplied && showRealized ? `<td style="color: ${diffColor}; font-weight: bold;">${diff !== null ? (diff > 0 ? '+' : '') + diff.toFixed(2) + '%' : '—'}</td>` : ''}
                         <td>#${rank + 1}</td>
                     </tr>
                 `;
@@ -9486,12 +9611,12 @@ Full report in email.
                             <thead>
                                 <tr>
                                     <th>Pair</th>
-                                    <th>Impl Vol</th>
+                                    ${showImplied ? `<th>Impl Vol</th>
                                     <th>${groupCcy} % (Impl)</th>
-                                    <th>Counter % (Impl)</th>
-                                    <th>Real Vol</th>
+                                    <th>Counter % (Impl)</th>` : ''}
+                                    ${showRealized ? `<th>Real Vol</th>
                                     <th>${groupCcy} % (Real)</th>
-                                    <th>Counter % (Real)</th>
+                                    <th>Counter % (Real)</th>` : ''}
                                 </tr>
                             </thead>
                             <tbody>
@@ -9504,7 +9629,7 @@ Full report in email.
                     html += `
                         <tr>
                             <td><strong>${p.displayPair}</strong></td>
-                            <td>${p.pairVol.toFixed(2)}%</td>
+                            ${showImplied ? `<td>${p.pairVol.toFixed(2)}%</td>
                             <td>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <div style="background: var(--cyan); width: ${bar1Width}px; height: 16px; border-radius: 2px;"></div>
@@ -9516,8 +9641,8 @@ Full report in email.
                                     <div style="background: var(--yellow); width: ${bar2Width}px; height: 16px; border-radius: 2px;"></div>
                                     <span>${p.rightPct.toFixed(1)}%</span>
                                 </div>
-                            </td>
-                            <td>${p.realPairVol !== null ? p.realPairVol.toFixed(2) + '%' : '—'}</td>
+                            </td>` : ''}
+                            ${showRealized ? `<td>${p.realPairVol !== null ? p.realPairVol.toFixed(2) + '%' : '—'}</td>
                             <td>${p.realLeftPct !== null ? `
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <div style="background: var(--cyan); opacity: 0.6; width: ${Math.min(p.realLeftPct, 100).toFixed(0)}px; height: 16px; border-radius: 2px;"></div>
@@ -9527,7 +9652,7 @@ Full report in email.
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <div style="background: var(--yellow); opacity: 0.6; width: ${Math.min(p.realRightPct, 100).toFixed(0)}px; height: 16px; border-radius: 2px;"></div>
                                     <span>${p.realRightPct.toFixed(1)}%</span>
-                                </div>` : '—'}</td>
+                                </div>` : '—'}</td>` : ''}
                         </tr>
                     `;
                 });
@@ -9542,65 +9667,28 @@ Full report in email.
             html += `</div>`;
 
             // Table 3: Implied Correlation Matrix
-            html += `
-                <div class="card" style="margin-bottom: 24px;">
-                    <h3 class="currency-header">🔗 ${n}×${n} Implied Basket Correlation Matrix</h3>
-                    <p style="margin-bottom: 16px; color: var(--text-secondary);">
-                        Implied correlations between currency basket exposures.
-                    </p>
-                    <div style="overflow-x: auto;">
-                        <table class="data-table correlation-matrix">
-                            <thead>
-                                <tr>
-                                    <th></th>
-                                    ${currencies.map(c => `<th>${c}</th>`).join('')}
-                                </tr>
-                            </thead>
-                            <tbody>
-            `;
-
-            currencies.forEach(ccy1 => {
-                html += `<tr><td><strong>${ccy1}</strong></td>`;
-                currencies.forEach(ccy2 => {
-                    const corr = (results.basketCorrelations[ccy1] && results.basketCorrelations[ccy1][ccy2]) || 0;
-                    const color = getCorrelationColor(corr);
-                    html += `<td style="background-color: ${color}; text-align: center;">${corr.toFixed(2)}</td>`;
-                });
-                html += '</tr>';
-            });
-
-            html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-
-            // Table 4: Realized Correlation Matrix
-            if (realized && realized.basketCorrelations) {
-                const realCurrencies = realized.currencies;
-                const rn = realCurrencies.length;
+            if (showImplied) {
                 html += `
                     <div class="card" style="margin-bottom: 24px;">
-                        <h3 class="currency-header">🔗 ${rn}×${rn} Realized Basket Correlation Matrix</h3>
+                        <h3 class="currency-header">🔗 ${n}×${n} Implied Basket Correlation Matrix</h3>
                         <p style="margin-bottom: 16px; color: var(--text-secondary);">
-                            Realized correlations between currency basket exposures.
+                            Implied correlations between currency basket exposures.
                         </p>
                         <div style="overflow-x: auto;">
                             <table class="data-table correlation-matrix">
                                 <thead>
                                     <tr>
                                         <th></th>
-                                        ${realCurrencies.map(c => `<th>${c}</th>`).join('')}
+                                        ${currencies.map(c => `<th>${c}</th>`).join('')}
                                     </tr>
                                 </thead>
                                 <tbody>
                 `;
 
-                realCurrencies.forEach(ccy1 => {
+                currencies.forEach(ccy1 => {
                     html += `<tr><td><strong>${ccy1}</strong></td>`;
-                    realCurrencies.forEach(ccy2 => {
-                        const corr = (realized.basketCorrelations[ccy1] && realized.basketCorrelations[ccy1][ccy2]) || 0;
+                    currencies.forEach(ccy2 => {
+                        const corr = (results.basketCorrelations[ccy1] && results.basketCorrelations[ccy1][ccy2]) || 0;
                         const color = getCorrelationColor(corr);
                         html += `<td style="background-color: ${color}; text-align: center;">${corr.toFixed(2)}</td>`;
                     });
@@ -9613,15 +9701,56 @@ Full report in email.
                         </div>
                     </div>
                 `;
-            } else {
-                html += `
-                    <div class="card" style="margin-bottom: 24px;">
-                        <h3 class="currency-header">🔗 Realized Basket Correlation Matrix</h3>
-                        <p style="margin-bottom: 16px; color: var(--text-secondary);">
-                            No realized vol data available. Load realized vols to compute realized basket correlations.
-                        </p>
-                    </div>
-                `;
+            }
+
+            // Table 4: Realized Correlation Matrix
+            if (showRealized) {
+                if (realized && realized.basketCorrelations) {
+                    const realCurrencies = realized.currencies;
+                    const rn = realCurrencies.length;
+                    html += `
+                        <div class="card" style="margin-bottom: 24px;">
+                            <h3 class="currency-header">🔗 ${rn}×${rn} Realized Basket Correlation Matrix</h3>
+                            <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                                Realized correlations between currency basket exposures.
+                            </p>
+                            <div style="overflow-x: auto;">
+                                <table class="data-table correlation-matrix">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            ${realCurrencies.map(c => `<th>${c}</th>`).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                    `;
+
+                    realCurrencies.forEach(ccy1 => {
+                        html += `<tr><td><strong>${ccy1}</strong></td>`;
+                        realCurrencies.forEach(ccy2 => {
+                            const corr = (realized.basketCorrelations[ccy1] && realized.basketCorrelations[ccy1][ccy2]) || 0;
+                            const color = getCorrelationColor(corr);
+                            html += `<td style="background-color: ${color}; text-align: center;">${corr.toFixed(2)}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+
+                    html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="card" style="margin-bottom: 24px;">
+                            <h3 class="currency-header">🔗 Realized Basket Correlation Matrix</h3>
+                            <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                                No realized vol data available. Load spot data to compute realized basket correlations.
+                            </p>
+                        </div>
+                    `;
+                }
             }
 
             // Timestamp
