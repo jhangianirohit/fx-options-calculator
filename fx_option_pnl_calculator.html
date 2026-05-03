@@ -8902,7 +8902,7 @@ Full report in email.
             }
         }
 
-        function findLargestCompleteBasket(allCurrencies) {
+        function findLargestCompleteBasket(allCurrencies, volLookupFn) {
             // Find the largest subset of currencies where ALL pairs have data
             // This is essentially finding a maximum clique in a graph where:
             // - Nodes are currencies
@@ -8917,7 +8917,7 @@ Full report in email.
                 allCurrencies.forEach(c2 => {
                     if (c1 !== c2) {
                         const pair = getCanonicalPairName(c1, c2);
-                        hasData[c1][c2] = getVolForPair(pair) !== null;
+                        hasData[c1][c2] = (volLookupFn || getVolForPair)(pair) !== null;
                     }
                 });
             });
@@ -9112,8 +9112,15 @@ Full report in email.
             return null;
         }
 
+        function getRealizedVolForPair(pair) {
+            const realVols = window.realizedVols || {};
+            const inversePair = pair.slice(3, 6) + pair.slice(0, 3);
+            if (realVols[pair] !== undefined) return realVols[pair];
+            if (realVols[inversePair] !== undefined) return realVols[inversePair];
+            return null;
+        }
+
         function computeBasketDecomposition() {
-            // Use the pre-computed valid basket (largest complete subset)
             const currencies = window.validBasketCurrencies || findLargestCompleteBasket(detectCurrenciesFromVols());
 
             if (currencies.length < 2) {
@@ -9122,29 +9129,46 @@ Full report in email.
             }
 
             try {
-                // Step 1: Build the NxN covariance matrix
-                const covMatrix = buildCovarianceMatrixDynamic(currencies);
+                // --- IMPLIED VOL ANALYSIS ---
+                const implCov = buildCovarianceMatrixDynamic(currencies, getVolForPair);
+                const { fullBasketVols: implFullBV, looBasketVols: implLooBV } = calculateBasketVolatilitiesDynamic(currencies, implCov, getVolForPair);
+                const implDecomps = calculatePairDecompositionsDynamic(currencies, implFullBV, implLooBV, getVolForPair);
+                const implCorrs = calculateBasketCorrelationMatrixDynamic(currencies, implCov, implFullBV, implLooBV, getVolForPair);
 
-                // Step 2: Calculate basket volatilities for each currency
-                const basketVols = calculateBasketVolatilitiesDynamic(currencies, covMatrix);
+                // --- REALIZED VOL ANALYSIS ---
+                let realized = null;
+                if (window.realizedVols && Object.keys(window.realizedVols).length > 0) {
+                    // Find complete basket for realized vols (may be smaller)
+                    const realCurrencies = findLargestCompleteBasket(currencies, getRealizedVolForPair);
+                    if (realCurrencies.length >= 2) {
+                        const realCov = buildCovarianceMatrixDynamic(realCurrencies, getRealizedVolForPair);
+                        const { fullBasketVols: realFullBV, looBasketVols: realLooBV } = calculateBasketVolatilitiesDynamic(realCurrencies, realCov, getRealizedVolForPair);
+                        const realDecomps = calculatePairDecompositionsDynamic(realCurrencies, realFullBV, realLooBV, getRealizedVolForPair);
+                        const realCorrs = calculateBasketCorrelationMatrixDynamic(realCurrencies, realCov, realFullBV, realLooBV, getRealizedVolForPair);
 
-                // Step 3: Calculate pair decomposition percentages
-                const pairDecompositions = calculatePairDecompositionsDynamic(currencies, basketVols);
-
-                // Step 4: Calculate NxN basket correlation matrix
-                const basketCorrelations = calculateBasketCorrelationMatrixDynamic(currencies, covMatrix, basketVols);
+                        realized = {
+                            currencies: realCurrencies,
+                            covMatrix: realCov,
+                            basketVols: realFullBV,
+                            looBasketVols: realLooBV,
+                            pairDecompositions: realDecomps,
+                            basketCorrelations: realCorrs
+                        };
+                    }
+                }
 
                 // Store results
                 window.basketDecompositionResults = {
                     currencies,
-                    covMatrix,
-                    basketVols,
-                    pairDecompositions,
-                    basketCorrelations,
+                    covMatrix: implCov,
+                    basketVols: implFullBV,
+                    looBasketVols: implLooBV,
+                    pairDecompositions: implDecomps,
+                    basketCorrelations: implCorrs,
+                    realized,
                     timestamp: new Date().toISOString()
                 };
 
-                // Update the results div
                 document.getElementById('basketResults').innerHTML = generateBasketResultsHTML();
 
             } catch (error) {
@@ -9153,7 +9177,7 @@ Full report in email.
             }
         }
 
-        function buildCovarianceMatrixDynamic(currencies) {
+        function buildCovarianceMatrixDynamic(currencies, volLookupFn) {
             // Build NxN covariance matrix for all currencies
             // Using the relationship: For any pair AB, σ²(AB) gives us information
             // We'll use direct pair volatilities to build the covariance structure
@@ -9172,7 +9196,7 @@ Full report in email.
                         for (let k = 0; k < n; k++) {
                             if (k !== i) {
                                 const pair = getCanonicalPairName(currencies[i], currencies[k]);
-                                const vol = getVolForPair(pair);
+                                const vol = (volLookupFn || getVolForPair)(pair);
                                 if (vol !== null) {
                                     sumVar += vol * vol;
                                     count++;
@@ -9187,7 +9211,7 @@ Full report in email.
                         // Cov(i,j) = (Var(i) + Var(j) - σ²(ij)) / 2
 
                         const pair = getCanonicalPairName(currencies[i], currencies[j]);
-                        const pairVol = getVolForPair(pair);
+                        const pairVol = (volLookupFn || getVolForPair)(pair);
 
                         if (pairVol !== null) {
                             const varI = cov[i][i];
@@ -9213,58 +9237,65 @@ Full report in email.
             return positiveConvention.includes(currency) ? 1 : -1;
         }
 
-        function calculateBasketVolatilitiesDynamic(currencies, covMatrix) {
-            // For each currency, calculate its "basket volatility"
-            // This represents the volatility of a portfolio that is long 1 unit of that currency
-            // against an equal-weighted basket of all other currencies
-
-            const basketVols = {};
+        function calculateBasketVolatilitiesDynamic(currencies, covMatrix, volLookupFn) {
+            const lookup = volLookupFn || getVolForPair;
+            const fullBasketVols = {};
+            const looBasketVols = {};  // looBasketVols[ccy][canonicalPairKey] = vol
             const n = currencies.length;
 
             currencies.forEach((ccy, i) => {
-                // Basket variance for currency i:
-                // Var(basket_i) = (1/(n-1)) * Σ_j Var(i/j) where j ≠ i
-
+                // Collect all pair variances for this currency
+                const pairVars = {};  // pairKey -> variance
                 let sumVar = 0;
                 let count = 0;
 
                 currencies.forEach((ccy2, j) => {
                     if (i === j) return;
-
                     const pair = getCanonicalPairName(ccy, ccy2);
-                    const pairVol = getVolForPair(pair);
+                    const pairVol = lookup(pair);
                     if (pairVol !== null) {
+                        pairVars[pair] = pairVol * pairVol;
                         sumVar += pairVol * pairVol;
                         count++;
                     }
                 });
 
-                // Average over all pairs
-                const basketVar = count > 0 ? sumVar / count : 0;
-                basketVols[ccy] = Math.sqrt(basketVar);
+                // Full basket vol (all pairs)
+                fullBasketVols[ccy] = count > 0 ? Math.sqrt(sumVar / count) : 0;
+
+                // LOO basket vols: for each pair, exclude it
+                looBasketVols[ccy] = {};
+                Object.keys(pairVars).forEach(excludedPair => {
+                    const looSum = sumVar - pairVars[excludedPair];
+                    const looCount = count - 1;
+                    looBasketVols[ccy][excludedPair] = looCount > 0
+                        ? Math.sqrt(looSum / looCount)
+                        : fullBasketVols[ccy];
+                });
             });
 
-            return basketVols;
+            return { fullBasketVols, looBasketVols };
         }
 
-        function calculatePairDecompositionsDynamic(currencies, basketVols) {
-            // For each pair, calculate what percentage of variance comes from each currency
+        function calculatePairDecompositionsDynamic(currencies, fullBasketVols, looBasketVols, volLookupFn) {
+            const lookup = volLookupFn || getVolForPair;
             const decompositions = {};
             const allPairs = generateAllPairsForCurrencies(currencies);
 
             allPairs.forEach(pair => {
                 const ccy1 = pair.slice(0, 3);
                 const ccy2 = pair.slice(3, 6);
-                const pairVol = getVolForPair(pair);
+                const pairVol = lookup(pair);
 
                 if (pairVol === null) return;
-                if (!basketVols[ccy1] || !basketVols[ccy2]) return;
 
-                const pairVar = pairVol * pairVol;
-                const basketVar1 = basketVols[ccy1] * basketVols[ccy1];
-                const basketVar2 = basketVols[ccy2] * basketVols[ccy2];
+                // Use LOO basket vols: exclude this pair from each currency's basket
+                const bVol1 = (looBasketVols[ccy1] && looBasketVols[ccy1][pair]) || fullBasketVols[ccy1];
+                const bVol2 = (looBasketVols[ccy2] && looBasketVols[ccy2][pair]) || fullBasketVols[ccy2];
+                if (!bVol1 || !bVol2) return;
 
-                // Simple decomposition: proportion of basket variance
+                const basketVar1 = bVol1 * bVol1;
+                const basketVar2 = bVol2 * bVol2;
                 const totalBasketVar = basketVar1 + basketVar2;
 
                 if (totalBasketVar > 0) {
@@ -9273,9 +9304,9 @@ Full report in email.
                         ccy2: ccy2,
                         pct1: (basketVar1 / totalBasketVar) * 100,
                         pct2: (basketVar2 / totalBasketVar) * 100,
-                        pairVol: pairVol * 100, // Convert to percentage
-                        basketVol1: basketVols[ccy1] * 100,
-                        basketVol2: basketVols[ccy2] * 100
+                        pairVol: pairVol * 100,
+                        basketVol1: bVol1 * 100,
+                        basketVol2: bVol2 * 100
                     };
                 }
             });
@@ -9283,44 +9314,33 @@ Full report in email.
             return decompositions;
         }
 
-        function calculateBasketCorrelationMatrixDynamic(currencies, covMatrix, basketVols) {
-            // Calculate NxN correlation matrix between basket exposures
+        function calculateBasketCorrelationMatrixDynamic(currencies, covMatrix, fullBasketVols, looBasketVols, volLookupFn) {
+            const lookup = volLookupFn || getVolForPair;
             const correlations = {};
             const n = currencies.length;
 
-            // Initialize correlation matrix
             currencies.forEach(ccy1 => {
                 correlations[ccy1] = {};
                 currencies.forEach(ccy2 => {
-                    if (ccy1 === ccy2) {
-                        correlations[ccy1][ccy2] = 1.0;
-                    } else {
-                        correlations[ccy1][ccy2] = 0;
-                    }
+                    correlations[ccy1][ccy2] = (ccy1 === ccy2) ? 1.0 : 0;
                 });
             });
 
-            // For each pair of currencies, calculate implied correlation
             for (let i = 0; i < n; i++) {
                 for (let j = i + 1; j < n; j++) {
                     const ccy1 = currencies[i];
                     const ccy2 = currencies[j];
+                    const pair = getCanonicalPairName(ccy1, ccy2);
 
-                    const vol1 = basketVols[ccy1];
-                    const vol2 = basketVols[ccy2];
+                    // Use LOO basket vols
+                    const vol1 = (looBasketVols[ccy1] && looBasketVols[ccy1][pair]) || fullBasketVols[ccy1];
+                    const vol2 = (looBasketVols[ccy2] && looBasketVols[ccy2][pair]) || fullBasketVols[ccy2];
 
                     if (vol1 > 0 && vol2 > 0) {
-                        // Get the direct pair volatility
-                        const pair = getCanonicalPairName(ccy1, ccy2);
-                        const pairVol = getVolForPair(pair);
-
+                        const pairVol = lookup(pair);
                         if (pairVol !== null) {
-                            // Implied correlation: ρ = (σ1² + σ2² - σpair²) / (2 * σ1 * σ2)
                             let rho = (vol1 * vol1 + vol2 * vol2 - pairVol * pairVol) / (2 * vol1 * vol2);
-
-                            // Clamp to valid correlation range
                             rho = Math.max(-1, Math.min(1, rho));
-
                             correlations[ccy1][ccy2] = rho;
                             correlations[ccy2][ccy1] = rho;
                         }
@@ -9349,6 +9369,7 @@ Full report in email.
 
             const currencies = results.currencies || window.detectedBasketCurrencies || [];
             const n = currencies.length;
+            const realized = results.realized;
 
             let html = '';
 
@@ -9363,8 +9384,10 @@ Full report in email.
                         <thead>
                             <tr>
                                 <th>Currency</th>
-                                <th>Basket Vol (%)</th>
-                                <th>Relative Rank</th>
+                                <th>Implied Basket Vol</th>
+                                <th>Realized Basket Vol</th>
+                                <th>Impl - Real</th>
+                                <th>Rank (Impl)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -9377,11 +9400,16 @@ Full report in email.
 
             sortedCurrencies.forEach((ccy, rank) => {
                 const vol = (results.basketVols[ccy] || 0) * 100;
+                const realVol = (realized && realized.basketVols[ccy] !== undefined) ? realized.basketVols[ccy] * 100 : null;
+                const diff = realVol !== null ? vol - realVol : null;
                 const volColor = vol > 10 ? 'var(--red)' : vol > 7 ? 'var(--yellow)' : 'var(--green)';
+                const diffColor = diff !== null ? (diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--text-primary)') : '';
                 html += `
                     <tr>
                         <td><strong>${ccy}</strong></td>
                         <td style="color: ${volColor}; font-weight: bold;">${vol.toFixed(2)}%</td>
+                        <td>${realVol !== null ? realVol.toFixed(2) + '%' : '—'}</td>
+                        <td style="color: ${diffColor}; font-weight: bold;">${diff !== null ? (diff > 0 ? '+' : '') + diff.toFixed(2) + '%' : '—'}</td>
                         <td>#${rank + 1}</td>
                     </tr>
                 `;
@@ -9398,7 +9426,7 @@ Full report in email.
                 <div class="card" style="margin-bottom: 24px;">
                     <h3 class="currency-header">🔀 Pair Decomposition by Currency</h3>
                     <p style="margin-bottom: 16px; color: var(--text-secondary);">
-                        Percentage of pair variance attributable to each constituent currency's basket exposure.
+                        Percentage of pair variance attributable to each constituent currency's basket exposure (LOO method).
                         Pairs are grouped by currency, with the group currency always shown on the left.
                     </p>
             `;
@@ -9413,7 +9441,14 @@ Full report in email.
                         // Determine if we need to swap the presentation
                         const needsSwap = decomp.ccy2 === groupCcy;
 
+                        // Look up realized decomposition for this pair
+                        let realDecomp = null;
+                        if (realized && realized.pairDecompositions) {
+                            realDecomp = realized.pairDecompositions[pair] || null;
+                        }
+
                         pairsForCurrency.push({
+                            pair: pair,
                             displayPair: needsSwap ? (groupCcy + decomp.ccy1) : pair,
                             pairVol: decomp.pairVol,
                             leftCcy: groupCcy,
@@ -9421,7 +9456,10 @@ Full report in email.
                             leftPct: needsSwap ? decomp.pct2 : decomp.pct1,
                             rightPct: needsSwap ? decomp.pct1 : decomp.pct2,
                             leftBasketVol: needsSwap ? decomp.basketVol2 : decomp.basketVol1,
-                            rightBasketVol: needsSwap ? decomp.basketVol1 : decomp.basketVol2
+                            rightBasketVol: needsSwap ? decomp.basketVol1 : decomp.basketVol2,
+                            realPairVol: realDecomp ? realDecomp.pairVol : null,
+                            realLeftPct: realDecomp ? (needsSwap ? realDecomp.pct2 : realDecomp.pct1) : null,
+                            realRightPct: realDecomp ? (needsSwap ? realDecomp.pct1 : realDecomp.pct2) : null
                         });
                     }
                 });
@@ -9448,10 +9486,12 @@ Full report in email.
                             <thead>
                                 <tr>
                                     <th>Pair</th>
-                                    <th>Pair Vol</th>
-                                    <th>${groupCcy} %</th>
-                                    <th>Counter CCY</th>
-                                    <th>Counter %</th>
+                                    <th>Impl Vol</th>
+                                    <th>${groupCcy} % (Impl)</th>
+                                    <th>Counter % (Impl)</th>
+                                    <th>Real Vol</th>
+                                    <th>${groupCcy} % (Real)</th>
+                                    <th>Counter % (Real)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -9471,13 +9511,15 @@ Full report in email.
                                     <span>${p.leftPct.toFixed(1)}%</span>
                                 </div>
                             </td>
-                            <td>${p.rightCcy}</td>
                             <td>
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <div style="background: var(--yellow); width: ${bar2Width}px; height: 16px; border-radius: 2px;"></div>
                                     <span>${p.rightPct.toFixed(1)}%</span>
                                 </div>
                             </td>
+                            <td>${p.realPairVol !== null ? p.realPairVol.toFixed(2) + '%' : '—'}</td>
+                            <td>${p.realLeftPct !== null ? p.realLeftPct.toFixed(1) + '%' : '—'}</td>
+                            <td>${p.realRightPct !== null ? p.realRightPct.toFixed(1) + '%' : '—'}</td>
                         </tr>
                     `;
                 });
@@ -9491,10 +9533,10 @@ Full report in email.
 
             html += `</div>`;
 
-            // Table 3: NxN Correlation Matrix
+            // Table 3: Implied Correlation Matrix
             html += `
                 <div class="card" style="margin-bottom: 24px;">
-                    <h3 class="currency-header">🔗 ${n}×${n} Basket Correlation Matrix</h3>
+                    <h3 class="currency-header">🔗 ${n}×${n} Implied Basket Correlation Matrix</h3>
                     <p style="margin-bottom: 16px; color: var(--text-secondary);">
                         Implied correlations between currency basket exposures.
                     </p>
@@ -9525,6 +9567,54 @@ Full report in email.
                     </div>
                 </div>
             `;
+
+            // Table 4: Realized Correlation Matrix
+            if (realized && realized.basketCorrelations) {
+                const realCurrencies = realized.currencies;
+                const rn = realCurrencies.length;
+                html += `
+                    <div class="card" style="margin-bottom: 24px;">
+                        <h3 class="currency-header">🔗 ${rn}×${rn} Realized Basket Correlation Matrix</h3>
+                        <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                            Realized correlations between currency basket exposures.
+                        </p>
+                        <div style="overflow-x: auto;">
+                            <table class="data-table correlation-matrix">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        ${realCurrencies.map(c => `<th>${c}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                realCurrencies.forEach(ccy1 => {
+                    html += `<tr><td><strong>${ccy1}</strong></td>`;
+                    realCurrencies.forEach(ccy2 => {
+                        const corr = (realized.basketCorrelations[ccy1] && realized.basketCorrelations[ccy1][ccy2]) || 0;
+                        const color = getCorrelationColor(corr);
+                        html += `<td style="background-color: ${color}; text-align: center;">${corr.toFixed(2)}</td>`;
+                    });
+                    html += '</tr>';
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="card" style="margin-bottom: 24px;">
+                        <h3 class="currency-header">🔗 Realized Basket Correlation Matrix</h3>
+                        <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                            No realized vol data available. Load realized vols to compute realized basket correlations.
+                        </p>
+                    </div>
+                `;
+            }
 
             // Timestamp
             html += `
