@@ -9518,8 +9518,16 @@ Full report in email.
                                 </div>
                             </td>
                             <td>${p.realPairVol !== null ? p.realPairVol.toFixed(2) + '%' : '—'}</td>
-                            <td>${p.realLeftPct !== null ? p.realLeftPct.toFixed(1) + '%' : '—'}</td>
-                            <td>${p.realRightPct !== null ? p.realRightPct.toFixed(1) + '%' : '—'}</td>
+                            <td>${p.realLeftPct !== null ? `
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="background: var(--cyan); opacity: 0.6; width: ${Math.min(p.realLeftPct, 100).toFixed(0)}px; height: 16px; border-radius: 2px;"></div>
+                                    <span>${p.realLeftPct.toFixed(1)}%</span>
+                                </div>` : '—'}</td>
+                            <td>${p.realRightPct !== null ? `
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="background: var(--yellow); opacity: 0.6; width: ${Math.min(p.realRightPct, 100).toFixed(0)}px; height: 16px; border-radius: 2px;"></div>
+                                    <span>${p.realRightPct.toFixed(1)}%</span>
+                                </div>` : '—'}</td>
                         </tr>
                     `;
                 });
