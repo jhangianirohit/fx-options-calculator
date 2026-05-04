@@ -9730,6 +9730,90 @@ Full report in email.
                 }
             }
 
+            // Table: Basket-Implied Fair Values
+            const impliedFV = showImplied ? computeBasketFairValues(currencies, results.basketVols, results.basketCorrelations, getVolForPair) : [];
+            const realizedFV = (showRealized && results.realized) ? computeBasketFairValues(
+                results.realized.currencies || currencies,
+                results.realized.basketVols,
+                results.realized.basketCorrelations,
+                getRealizedVolForPair
+            ) : [];
+
+            if (impliedFV.length > 0 || realizedFV.length > 0) {
+                html += `
+                    <div class="card" style="margin-bottom: 24px;">
+                        <h3 class="currency-header">📐 Basket-Implied Fair Values</h3>
+                        <p style="margin-bottom: 12px; color: var(--text-secondary);">
+                            Each pair's fair vol is computed from the basket structure of ALL OTHER pairs (LOO basket vols + rank-1 predicted correlation).
+                            Signal = Fair Vol − Market Vol. Positive = <span style="color: var(--green);">CHEAP</span>, Negative = <span style="color: var(--red);">RICH</span>.
+                        </p>
+                `;
+
+                const fvData = impliedFV.length > 0 ? impliedFV : realizedFV;
+                const fvLabel = impliedFV.length > 0 ? 'Impl' : 'Real';
+                const realFVMap = {};
+                realizedFV.forEach(r => realFVMap[r.pair] = r);
+
+                html += `<div style="overflow-x: auto;"><table class="data-table"><thead><tr>`;
+                html += `<th>Pair</th>`;
+                if (showImplied) {
+                    html += `<th>Impl Vol</th><th>Fair Vol (Impl)</th><th>Signal (Impl)</th>`;
+                }
+                if (showRealized) {
+                    html += `<th>Real Vol</th><th>Fair Vol (Real)</th><th>Signal (Real)</th>`;
+                }
+                html += `<th>ρ Predicted</th><th>Direction</th>`;
+                html += `</tr></thead><tbody>`;
+
+                const maxSignal = Math.max(...fvData.map(f => Math.abs(f.signal)), 0.1);
+
+                fvData.forEach(fv => {
+                    const rfv = realFVMap[fv.pair];
+                    const signal = fv.signal;
+                    const absSignal = Math.abs(signal);
+                    const barWidth = Math.min(absSignal / maxSignal * 80, 80).toFixed(0);
+                    const barColor = signal > 0 ? 'var(--green)' : 'var(--red)';
+                    const label = absSignal < 0.05 ? 'FLAT' : (signal > 0 ? 'CHEAP' : 'RICH');
+                    const labelColor = absSignal < 0.05 ? 'var(--text-muted)' : barColor;
+
+                    html += `<tr>`;
+                    html += `<td><strong>${fv.pair}</strong></td>`;
+
+                    if (showImplied) {
+                        html += `<td>${fv.impliedVol.toFixed(2)}%</td>`;
+                        html += `<td>${fv.fairVol.toFixed(2)}%</td>`;
+                        html += `<td>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <div style="background: ${barColor}; width: ${barWidth}px; height: 14px; border-radius: 2px;"></div>
+                                <span style="color: ${barColor}; font-weight: 600;">${signal >= 0 ? '+' : ''}${signal.toFixed(2)}%</span>
+                            </div>
+                        </td>`;
+                    }
+
+                    if (showRealized && rfv) {
+                        const rSignal = rfv.signal;
+                        const rBarWidth = Math.min(Math.abs(rSignal) / maxSignal * 80, 80).toFixed(0);
+                        const rBarColor = rSignal > 0 ? 'var(--green)' : 'var(--red)';
+                        html += `<td>${rfv.impliedVol.toFixed(2)}%</td>`;
+                        html += `<td>${rfv.fairVol.toFixed(2)}%</td>`;
+                        html += `<td>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <div style="background: ${rBarColor}; opacity: 0.6; width: ${rBarWidth}px; height: 14px; border-radius: 2px;"></div>
+                                <span style="color: ${rBarColor}; font-weight: 600;">${rSignal >= 0 ? '+' : ''}${rSignal.toFixed(2)}%</span>
+                            </div>
+                        </td>`;
+                    } else if (showRealized) {
+                        html += `<td>—</td><td>—</td><td>—</td>`;
+                    }
+
+                    html += `<td>${fv.rhoPred.toFixed(3)}</td>`;
+                    html += `<td style="color: ${labelColor}; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;">${label}</td>`;
+                    html += `</tr>`;
+                });
+
+                html += `</tbody></table></div></div>`;
+            }
+
             // Timestamp
             html += `
                 <p style="text-align: center; color: var(--text-muted); font-size: 12px;">
@@ -9738,6 +9822,79 @@ Full report in email.
             `;
 
             return html;
+        }
+
+        function computeBasketFairValues(currencies, basketVols, basketCorrelations, volLookupFn) {
+            const lookup = volLookupFn || getVolForPair;
+            const n = currencies.length;
+            const scale = (n - 1) / n; // (N-1)/N scaling
+            const results = [];
+
+            for (let i = 0; i < n; i++) {
+                for (let j = i + 1; j < n; j++) {
+                    const ccy1 = currencies[i];
+                    const ccy2 = currencies[j];
+                    const pair = getCanonicalPairName(ccy1, ccy2);
+                    const impliedVol = lookup(pair);
+                    if (impliedVol === null) continue;
+
+                    // Step 1: LOO basket vols (exclude this pair from each currency's basket)
+                    let sum1 = 0, cnt1 = 0;
+                    let sum2 = 0, cnt2 = 0;
+                    for (let k = 0; k < n; k++) {
+                        if (k === i || k === j) continue;
+                        const p1 = getCanonicalPairName(ccy1, currencies[k]);
+                        const v1 = lookup(p1);
+                        if (v1 !== null) { sum1 += v1 * v1; cnt1++; }
+                        const p2 = getCanonicalPairName(ccy2, currencies[k]);
+                        const v2 = lookup(p2);
+                        if (v2 !== null) { sum2 += v2 * v2; cnt2++; }
+                    }
+                    if (cnt1 === 0 || cnt2 === 0) continue;
+                    const looBV1 = Math.sqrt(sum1 / cnt1);
+                    const looBV2 = Math.sqrt(sum2 / cnt2);
+
+                    // Step 2: Predicted correlation via rank-1 factor model
+                    // ρ_pred(A,B) = mean over C≠A,B of ρ(A,C) × ρ(B,C)
+                    let rhoSum = 0, rhoCnt = 0;
+                    for (let k = 0; k < n; k++) {
+                        if (k === i || k === j) continue;
+                        const ck = currencies[k];
+                        const rhoAC = basketCorrelations[ccy1] && basketCorrelations[ccy1][ck];
+                        const rhoBC = basketCorrelations[ccy2] && basketCorrelations[ccy2][ck];
+                        if (rhoAC !== undefined && rhoBC !== undefined) {
+                            rhoSum += rhoAC * rhoBC;
+                            rhoCnt++;
+                        }
+                    }
+                    if (rhoCnt === 0) continue;
+                    const rhoPred = Math.max(-1, Math.min(1, rhoSum / rhoCnt));
+
+                    // Step 3: Fair vol = sqrt(σ²_A + σ²_B - 2ρσ_Aσ_B) × (N-1)/N
+                    const fairVar = looBV1 * looBV1 + looBV2 * looBV2 - 2 * rhoPred * looBV1 * looBV2;
+                    if (fairVar < 0) continue;
+                    const fairVol = Math.sqrt(fairVar) * scale;
+
+                    // Step 4: Signal
+                    const signal = fairVol - impliedVol; // positive = CHEAP, negative = RICH
+
+                    results.push({
+                        pair, ccy1, ccy2,
+                        impliedVol: impliedVol * 100,
+                        fairVol: fairVol * 100,
+                        signal: signal * 100,
+                        rhoPred,
+                        looBV1: looBV1 * 100,
+                        looBV2: looBV2 * 100,
+                        basketVol1: (basketVols[ccy1] || 0) * 100,
+                        basketVol2: (basketVols[ccy2] || 0) * 100
+                    });
+                }
+            }
+
+            // Sort by |signal| descending
+            results.sort((a, b) => Math.abs(b.signal) - Math.abs(a.signal));
+            return results;
         }
 
         function getCorrelationColor(corr) {
